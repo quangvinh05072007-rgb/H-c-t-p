@@ -1,18 +1,37 @@
 // Xuất đề thi và đáp án ra PDF vector chuẩn A4 tiếng Việt Unicode (dùng pdf-lib + @pdf-lib/fontkit, thuần Node.js).
 import fs from 'node:fs';
+import path from 'node:path';
 import { PDFDocument, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { displayedAnswer } from './generate.mjs';
 import { crossAnswerKey } from './exportExam.mjs';
 
+// Font Unicode có dấu tiếng Việt. Thứ tự ưu tiên: biến môi trường → Linux → Windows → macOS.
+// Đặt SMARTEXAM_PDF_FONT / SMARTEXAM_PDF_FONT_BOLD để dùng font riêng (TTF/OTF).
+const WIN_FONTS = path.join(process.env.WINDIR || process.env.SystemRoot || 'C:\\Windows', 'Fonts');
 const FONT_REGULAR_CANDIDATES = [
+  process.env.SMARTEXAM_PDF_FONT,
   '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+  '/usr/share/fonts/TTF/DejaVuSans.ttf',
   '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
-];
+  path.join(WIN_FONTS, 'arial.ttf'),
+  path.join(WIN_FONTS, 'times.ttf'),
+  path.join(WIN_FONTS, 'tahoma.ttf'),
+  path.join(WIN_FONTS, 'segoeui.ttf'),
+  '/Library/Fonts/Arial Unicode.ttf',
+  '/System/Library/Fonts/Supplemental/Arial.ttf',
+].filter(Boolean);
 const FONT_BOLD_CANDIDATES = [
+  process.env.SMARTEXAM_PDF_FONT_BOLD,
   '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+  '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf',
   '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-];
+  path.join(WIN_FONTS, 'arialbd.ttf'),
+  path.join(WIN_FONTS, 'timesbd.ttf'),
+  path.join(WIN_FONTS, 'tahomabd.ttf'),
+  path.join(WIN_FONTS, 'segoeuib.ttf'),
+  '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
+].filter(Boolean);
 
 let cachedFonts = null;
 function loadUnicodeFonts() {
@@ -20,7 +39,7 @@ function loadUnicodeFonts() {
   const regPath = FONT_REGULAR_CANDIDATES.find((p) => fs.existsSync(p));
   const boldPath = FONT_BOLD_CANDIDATES.find((p) => fs.existsSync(p)) || regPath;
   if (!regPath) {
-    throw new Error('Không tìm thấy font Unicode (DejaVuSans.ttf) để xuất PDF tiếng Việt.');
+    throw new Error('Không tìm thấy font Unicode (DejaVu Sans, Arial, Times New Roman…) để xuất PDF tiếng Việt. Đặt biến SMARTEXAM_PDF_FONT trỏ tới file .ttf.');
   }
   cachedFonts = {
     regular: fs.readFileSync(regPath),
