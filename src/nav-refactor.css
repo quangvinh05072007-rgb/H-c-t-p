@@ -1,0 +1,581 @@
+/* ==========================================================================
+   SmartExam Navigation Refactor — Minimalist, Clean Light Blue & White System
+   ========================================================================== */
+
+:root {
+  --nav-bg: #ffffff;
+  --nav-surface: #ffffff;
+  --nav-soft: #e8f2ec;
+  --nav-hover: #f3f8f5;
+  --nav-primary: #1e4d3b;
+  --nav-ink: #14263d;
+  --nav-muted: #64748b;
+  --nav-border: #e5edf5;
+  --nav-shadow: 0 10px 30px -6px rgba(20, 38, 61, 0.14), 0 2px 8px rgba(20, 38, 61, 0.06);
+}
+
+[data-theme='dark'] {
+  --nav-bg: #111827;
+  --nav-surface: #172133;
+  --nav-soft: rgba(16, 185, 129, 0.16);
+  --nav-hover: rgba(255, 255, 255, 0.05);
+  --nav-primary: #34d399;
+  --nav-ink: #f1f5f9;
+  --nav-muted: #94a3b8;
+  --nav-border: #24324a;
+  --nav-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+/* Override Sidebar to clean white & soft blue */
+.workspace-app > .sidebar {
+  background: var(--nav-bg);
+  border-right: 1px solid var(--nav-border);
+  overflow: visible;
+  z-index: 120;
+}
+
+/* Align mobile/tablet breakpoint with styles.css (900px) so sidebar and tabbar never overlap */
+@media (max-width: 899px) {
+  .workspace-app > .sidebar {
+    display: none !important;
+  }
+}
+
+.workspace-app > .sidebar .sidebar-header {
+  border-bottom-color: var(--nav-border);
+}
+
+.workspace-app > .sidebar.collapsed .sidebar-header {
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 10px;
+}
+
+.workspace-app > .sidebar.collapsed .sidebar-collapse-toggle {
+  display: inline-flex !important;
+  width: 32px;
+  height: 28px;
+}
+
+.workspace-app > .sidebar .sidebar-footer-group {
+  border-top-color: var(--nav-border);
+}
+
+.workspace-app > .sidebar .sidebar-nav-list {
+  gap: 4px;
+}
+
+.nav-item-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.nav-item-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 10px;
+  transition: background-color 0.15s ease;
+}
+
+.nav-item-row:hover {
+  background: var(--nav-hover);
+}
+
+.nav-item-row.is-active {
+  background: var(--nav-soft);
+}
+
+.workspace-app .sidebar a.nav.nav-primary-link,
+.workspace-app .sidebar button.nav.nav-primary-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 11px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--nav-muted);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.workspace-app .sidebar.collapsed a.nav.nav-primary-link,
+.workspace-app .sidebar.collapsed button.nav.nav-primary-link {
+  justify-content: center;
+  padding: 0;
+  width: 100%;
+}
+
+.workspace-app .sidebar a.nav.nav-primary-link svg,
+.workspace-app .sidebar button.nav.nav-primary-link svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--nav-muted);
+  transition: color 0.15s ease;
+}
+
+.nav-item-row:hover a.nav.nav-primary-link,
+.nav-item-row:hover button.nav.nav-primary-link {
+  background: transparent;
+  color: var(--nav-ink);
+}
+
+.nav-item-row:hover a.nav.nav-primary-link svg,
+.nav-item-row:hover button.nav.nav-primary-link svg {
+  color: var(--nav-ink);
+}
+
+.nav-item-row.is-active a.nav.nav-primary-link,
+.nav-item-row.is-active button.nav.nav-primary-link {
+  background: transparent !important;
+  color: var(--nav-primary);
+  font-weight: 600;
+}
+
+.nav-item-row.is-active a.nav.nav-primary-link svg,
+.nav-item-row.is-active button.nav.nav-primary-link svg {
+  color: var(--nav-primary);
+}
+
+.nav-inline-chevron {
+  margin-left: auto;
+  width: 15px !important;
+  height: 15px !important;
+  transition: transform 0.15s ease;
+}
+
+.nav-inline-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.nav-chevron-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 32px;
+  margin-right: 4px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--nav-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.nav-chevron-btn:hover {
+  background: rgba(30, 77, 59, 0.09);
+  color: var(--nav-primary);
+}
+
+.nav-chevron-btn svg {
+  width: 15px;
+  height: 15px;
+  transition: transform 0.15s ease;
+}
+
+.nav-chevron-btn[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+  color: var(--nav-primary);
+}
+
+.sidebar-footer-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--nav-ink);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-footer-account:hover {
+  background: var(--nav-hover);
+}
+
+.sidebar-footer-account.is-active {
+  background: var(--nav-soft);
+  color: var(--nav-primary);
+}
+
+.sidebar-footer-chevron {
+  color: var(--nav-muted);
+  flex-shrink: 0;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-footer-account.is-active .sidebar-footer-chevron,
+.sidebar-footer-account:hover .sidebar-footer-chevron {
+  color: var(--nav-primary);
+}
+
+.sidebar-footer-account[aria-expanded='true'] .sidebar-footer-chevron {
+  transform: rotate(90deg);
+}
+
+.workspace-app > .sidebar.collapsed .sidebar-footer-account {
+  justify-content: center;
+  padding: 6px 0;
+}
+
+/* Compact Popover / Dropdown for Sidebar & Mobile Tabbar */
+.nav-popover {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 0;
+  min-width: 232px;
+  background: var(--nav-surface);
+  border: 1px solid var(--nav-border);
+  border-radius: 12px;
+  box-shadow: var(--nav-shadow);
+  padding: 6px;
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-popover.is-utility {
+  top: auto;
+  bottom: 0;
+}
+
+.nav-popover-header {
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--nav-border);
+  margin-bottom: 4px;
+}
+
+.nav-popover-header strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nav-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-popover-header small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--nav-muted);
+}
+
+.nav-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--nav-ink);
+  font-size: 13.5px;
+  font-weight: 500;
+  font-family: inherit;
+  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.nav-popover-item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--nav-muted);
+  flex-shrink: 0;
+}
+
+.nav-popover-item:hover,
+.nav-popover-item:focus-visible {
+  background: var(--nav-hover);
+  color: var(--nav-primary);
+  outline: none;
+}
+
+.nav-popover-item:hover svg,
+.nav-popover-item:focus-visible svg {
+  color: var(--nav-primary);
+}
+
+.nav-popover-item.is-active {
+  background: var(--nav-soft);
+  color: var(--nav-primary);
+  font-weight: 600;
+}
+
+.nav-popover-item.is-active svg {
+  color: var(--nav-primary);
+}
+
+.nav-popover-item.is-danger {
+  color: #dc2626;
+}
+
+.nav-popover-item.is-danger svg {
+  color: #dc2626;
+}
+
+.nav-popover-item.is-danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.nav-popover-divider {
+  height: 1px;
+  background: var(--nav-border);
+  margin: 4px 2px;
+}
+
+/* Mobile Tabbar & Compact Floating Popover (No Giant Bordered Modal Buttons) */
+.tabbar.nav-tabbar-clean {
+  background: var(--nav-bg);
+  border-top: 1px solid var(--nav-border);
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  gap: 2px;
+}
+
+.tabbar.nav-tabbar-clean a,
+.tabbar.nav-tabbar-clean button {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 4px;
+  border-radius: 10px;
+  color: var(--nav-muted);
+  font-size: 11px;
+  font-weight: 500;
+  gap: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.tabbar.nav-tabbar-clean a svg,
+.tabbar.nav-tabbar-clean button svg {
+  width: 19px;
+  height: 19px;
+}
+
+.tabbar.nav-tabbar-clean a:hover,
+.tabbar.nav-tabbar-clean button:hover {
+  background: var(--nav-hover);
+  color: var(--nav-ink);
+}
+
+.tabbar.nav-tabbar-clean a.active,
+.tabbar.nav-tabbar-clean button.active {
+  background: var(--nav-soft);
+  color: var(--nav-primary);
+  font-weight: 600;
+}
+
+.nav-mobile-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.18);
+  z-index: 44;
+}
+
+.nav-mobile-popover {
+  position: fixed;
+  right: 12px;
+  bottom: calc(68px + env(safe-area-inset-bottom));
+  width: min(260px, calc(100vw - 24px));
+  background: var(--nav-surface);
+  border: 1px solid var(--nav-border);
+  border-radius: 14px;
+  box-shadow: var(--nav-shadow);
+  padding: 6px;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@media (min-width: 900px) {
+  .nav-mobile-backdrop,
+  .nav-mobile-popover {
+    display: none;
+  }
+}
+
+/* Create Exam 3 Compact Action Cards (Requirement 4) */
+.nav-subcards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.nav-subcard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--nav-surface);
+  border: 1px solid var(--nav-border);
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--nav-ink);
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.nav-subcard:hover {
+  border-color: rgba(30, 77, 59, 0.4);
+  background: var(--nav-hover);
+}
+
+.nav-subcard.is-active {
+  border-color: var(--nav-primary);
+  background: var(--nav-soft);
+}
+
+.nav-subcard.is-featured:not(.is-active) {
+  border-color: rgba(30, 77, 59, 0.28);
+}
+
+.nav-subcard-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nav-soft);
+  color: var(--nav-primary);
+  flex-shrink: 0;
+}
+
+.nav-subcard.is-active .nav-subcard-icon {
+  background: var(--nav-primary);
+  color: #ffffff;
+}
+
+.nav-subcard-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.nav-subcard-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-subcard-title-row strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--nav-ink);
+  white-space: nowrap;
+}
+
+.nav-subcard.is-active .nav-subcard-title-row strong {
+  color: var(--nav-primary);
+}
+
+.nav-subcard-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--nav-primary);
+  background: var(--nav-soft);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.nav-subcard.is-active .nav-subcard-tag {
+  background: rgba(30, 77, 59, 0.15);
+}
+
+.nav-subcard-desc {
+  font-size: 12px;
+  color: var(--nav-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 767px) {
+  .nav-subcards {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .nav-subcard {
+    padding: 10px 12px;
+  }
+}
+
+/* Kho đề Inline Tabs (Kho đề thi | Ngân hàng câu hỏi) */
+.nav-inline-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--nav-surface);
+  border: 1px solid var(--nav-border);
+  border-radius: 10px;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.nav-inline-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--nav-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.nav-inline-tab:hover {
+  background: var(--nav-hover);
+  color: var(--nav-ink);
+}
+
+.nav-inline-tab.is-active {
+  background: var(--nav-soft);
+  color: var(--nav-primary);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-item-row,
+  .nav-popover-item,
+  .nav-subcard,
+  .nav-inline-tab {
+    transition: none;
+  }
+}

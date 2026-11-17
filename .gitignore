@@ -1,0 +1,9 @@
+node_modules/
+dist/
+data/
+config.local.json
+*.log
+tmp-out/
+tmp-serve.mjs
+__pycache__/
+*.pyc

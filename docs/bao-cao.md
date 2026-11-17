@@ -1,0 +1,241 @@
+# Báo cáo bản 0.1 — 19/10/2026
+
+## 1. Đã làm
+
+**Vòng lát cắt dọc chạy được đầu-cuối trong trình duyệt:**
+nhập đề → gắn nhãn → duyệt → sinh đề → giao → thi online → chấm → chẩn đoán → luyện lại.
+
+| Khối | Nội dung |
+|---|---|
+| Nhập đề | Dán văn bản; Word .docx (đọc Equation OMML thành LaTeX, đáp án gạch chân/tô đỏ/tô nền, bảng đáp án cuối đề kể cả dạng bảng hai hàng); PDF có lớp chữ; Excel .xlsx / CSV theo mẫu; ảnh qua AI (khi có khóa). Báo rõ khi gặp .doc, PDF scan, MathType OLE, hình. |
+| Gắn nhãn | 23 chuyên đề Toán 10–12 (GDPT 2018), mức Biết/Hiểu/Vận dụng, độ tin cậy; câu tin cậy thấp được tô "cần xem". |
+| Ngân hàng | Lọc theo trạng thái, loại, chuyên đề, nguồn, mức độ; sửa có xem trước KaTeX; gắn kiểu lỗi cho từng phương án nhiễu; duyệt hàng loạt (máy chủ chặn câu thiếu thông tin); nhãn nguồn Official / Teacher Bank / Imported / AI Generated / AI Modified; thống kê lượt làm, tỉ lệ đúng từng câu. |
+| Ra đề | Mẫu "Đề tốt nghiệp chuẩn 12/4/6", 45 phút, 15 phút, tùy chỉnh; tỉ lệ mức độ; lọc chuyên đề; tránh câu của 5 đề gần nhất; ma trận đề; đổi từng câu; báo thiếu câu trung thực; đề được "chụp" lại khi lưu nên sửa ngân hàng sau không làm đổi đề đã giao. |
+| Mã đề | Đảo câu trong từng phần và đảo phương án, theo hạt giống; mỗi học sinh một bản riêng khi thi online. |
+| Xuất Word | Mọi mã đề + bảng đáp án (tùy chọn kèm lời giải), công thức là Equation thật. |
+| Giao đề | Thi online có giờ hoặc bài tập về nhà; giờ mở/đóng; cho xem điểm ngay hoặc sau khi đóng bài. |
+| Phòng thi | Đồng hồ theo giờ máy chủ; lưu vào máy ngay mỗi lần chọn + đồng bộ lên máy chủ (đánh số phiên bản, bản cũ không đè bản mới); mất mạng vẫn làm tiếp; có mạng lại tự gửi; nộp thử lại nhiều lần; hết giờ máy chủ tự chốt bằng bản lưu cuối; bản làm lúc mất mạng gửi muộn được giữ riêng để giáo viên quyết định có tính hay không; nộp lặp không sinh bài trùng. |
+| Chấm | Đúng quy chế 2025 (Phần II: 0,1 / 0,25 / 0,5 / 1); trả lời ngắn nhận dấu phẩy, dấu trừ unicode, phân số, nhiều đáp án; đề rút gọn quy về thang 10. |
+| Chẩn đoán | Mỗi câu sai → chuyên đề + kiểu lỗi (khái niệm, công thức, biến đổi, bất cẩn) từ nhãn phương án nhiễu, đáp án sai đã biết, quy tắc (sai dấu, lệch 10ⁿ, làm tròn sai, làm quá nhanh), mặc định theo mức độ. |
+| Năng lực, luyện lại | Năng lực theo chuyên đề (trung bình có trọng số mức độ, giảm dần theo thời gian, có tiên nghiệm); gợi ý 8 câu đúng mức; luyện tập chấm từng câu có lời giải; sổ lỗi sai nhắc ôn 1–3–7–14–30 ngày. |
+| Giáo viên | Tổng quan với "việc nên làm" (dạy lại chuyên đề, kèm riêng em nào); báo cáo bài giao: phổ điểm, điểm từng phần, kiểu lỗi, phân tích câu hỏi (tỉ lệ điểm, độ phân biệt 27%, phương án bị chọn, cờ nghi sai đáp án); bản đồ nhiệt học sinh × chuyên đề; hồ sơ học sinh; xem bài làm kèm tín hiệu bất thường. |
+| Học sinh | Trang "Hôm nay" một hành động chính; chuỗi ngày, XP, mục tiêu 10 câu/ngày; mascot gốc "Cú Pi" (vẽ SVG riêng). |
+| Quản lý | Chất lượng theo khối/lớp/giáo viên, tỉ lệ tham gia, chuyên đề yếu toàn trường, thành phần ngân hàng; quản lý lớp, tài khoản, mật khẩu tạm; nhật ký thao tác. |
+| Bảo mật | Mật khẩu scrypt; cookie HttpOnly SameSite; khóa đăng nhập sau 5 lần sai; chặn yêu cầu ghi không phải JSON (chống CSRF); mọi truy vấn lọc theo trường từ phiên; phân quyền ở từng API; học sinh không nhận đáp án/lời giải khi đang thi; chỉ lưu tên hiển thị + tên đăng nhập của học sinh; ghi nhật ký cả việc xem hồ sơ/bài làm học sinh. |
+
+## 2. Kiểm thử đã chạy thật
+
+`npm run check` → kiểm tra kiểu TypeScript sạch, **47/47 test đạt**, build thành công (chạy lúc 19/10/2026 trên Windows 11, Node 24.21).
+
+| File test | Nội dung |
+|---|---|
+| `grading.test.mjs` | Thang Phần II từng mức, chuẩn hóa trả lời ngắn, đề đủ 22 câu = 10 điểm, bài lẻ 7,85, quy về thang 10 |
+| `generate.test.mjs` | Đúng 12/4/6, tỉ lệ mức độ 5/4/3, tái lập theo hạt giống, chỉ câu đã duyệt, báo thiếu, lọc chuyên đề, tránh câu cũ, mã đề đổi đáp án đúng |
+| `diagnose.test.mjs` | Kiểu lỗi từ phương án nhiễu/quy tắc/thời gian, năng lực, sổ lỗi sai, chọn câu luyện tập, phân loại chuyên đề ("học sinh" không bị nhầm là sin) |
+| `import.test.mjs` | Tách đề theo phần, đáp án dấu *, [[OK]], dòng Đáp án, bảng đáp án hai hàng và theo phần, "A." trong đề bài không bị nhầm; Excel/CSV mẫu |
+| `word.test.mjs` | LaTeX → OMML (thẻ cân bằng cho toàn bộ công thức mẫu), đi vòng OMML → LaTeX, xuất rồi đọc lại đề, đọc phương án gạch chân, **file đề soạn bằng Microsoft Word thật** |
+| `api.test.mjs` | Qua HTTP: đăng nhập/khóa, nhập → duyệt (chặn câu thiếu đáp án), câu nháp không vào đề, sinh/lưu/xuất Word, giao chỉ lớp mình, đề không lộ đáp án, cách ly lớp và trường, lưu theo phiên bản, hết giờ khi mất mạng → tự chốt + bản muộn chờ duyệt → giáo viên nhận và chấm lại, nộp lặp, chẩn đoán, luyện tập, báo cáo, quản lý, nhật ký, CSRF, AI tắt |
+
+**Kiểm tra bằng Microsoft Word trên máy:** file xuất toàn bộ 64 câu mẫu mở được trong Word, Word đếm **505 Equation** (OMaths), 12 trang; đã xem ảnh trang 1 — phân số, tích phân, lôgarit hiển thị đúng. Lỗi tìm được và đã sửa: `\big|` bị in thành chữ "big".
+
+**Dùng thử trong trình duyệt (browser pane):**
+- Học sinh: trang Hôm nay → bắt đầu thi → chọn đáp án (lưu lên máy chủ) → giả lập mất mạng (chặn fetch): chip báo "Mất mạng · đã lưu trên máy", vẫn làm tiếp → có mạng lại: tự đồng bộ, máy chủ có đủ câu trả lời → nộp → trang kết quả: điểm từng phần, kiểu lỗi (đáp số −4 thay vì 4 được nhận là "Bất cẩn"; phương án C nhận đúng nhãn "Lấy hệ số tự do làm thành phần") → "Luyện lại phần yếu" → kiểm tra từng câu có lời giải.
+- Giáo viên: tổng quan có "việc nên làm" → nhập đề dán → tách 3 câu, đoán chuyên đề → lưu → duyệt → ra đề chuẩn (hiện cảnh báo dùng lại câu cũ khi ngân hàng mẫu hết câu mới) → lưu → giao 12A1 → báo cáo bài giữa kì: phổ điểm, kiểu lỗi, phân tích câu hỏi.
+- Quản lý: trang toàn trường. Giao diện điện thoại (375 px): trang học sinh hiển thị đúng, thanh điều hướng dưới.
+- Lỗi tìm được và đã sửa: lời giải bị căn phải do trùng tên lớp CSS.
+
+**Chưa kiểm thử thật:** chức năng AI (không có khóa trong máy này — chỉ kiểm tra được nhánh "AI tắt" trả lỗi hướng dẫn); nhập PDF bằng file PDF thật (mã có, chưa có file mẫu để thử); nhập .xlsx thật (đã test CSV cùng bộ đọc hàng; bộ đọc .xlsx chưa chạy với file Excel thật); tải file trong trình duyệt (đã test bằng API, không bấm tải trong browser pane); nhiều người thi đồng thời / tải lớn; trình duyệt Safari/iOS.
+
+## 3. Cái gì là khung, cái gì là định hướng
+
+- **Khung (có mã, cần khóa hoặc dữ liệu để chạy):** AI đọc ảnh đề, sinh câu tương tự, viết lời giải.
+- **Dữ liệu mẫu:** trường mẫu, 64 câu do SmartExam soạn (đã kiểm đáp án bằng tay, **không phải** đề của Bộ), các bài "(mô phỏng)" có điểm sinh từ mô hình năng lực giả định. Đều ghi nhãn trên giao diện.
+- **Định hướng:** xem mục 5.
+
+## 4. Giới hạn còn lại
+
+1. Hình vẽ trong đề Word/PDF chưa nhập được (đánh dấu `[hình]` để giáo viên bổ sung); câu hỏi chưa có ô chèn hình.
+2. Công thức MathType dạng OLE và PDF scan chưa đọc được nếu không có AI.
+3. Phân loại chuyên đề dựa trên từ khóa: tốt với đề có thuật ngữ rõ, kém với câu ngắn; giáo viên phải xem lại câu "cần xem".
+4. Chống gian lận chỉ là tín hiệu (rời tab, dán, máy thứ hai, mất mạng); không có chế độ khóa máy.
+5. Năng lực là ước lượng đơn giản, chưa phải IRT; ngưỡng yếu/khá/vững là giả định, chưa hiệu chỉnh bằng dữ liệu thật.
+6. Một máy chủ, một file SQLite: phù hợp một trường; chưa thử tải hàng nghìn học sinh cùng lúc; chưa có sao lưu tự động.
+7. Chưa có đăng nhập SSO, nhập danh sách học sinh hàng loạt, thông báo cho phụ huynh.
+
+## 5. Năm việc nên làm tiếp
+
+1. **Hình trong câu hỏi:** nhập ảnh từ docx (word/media), ô chèn/vẽ hình trong trình soạn, xuất hình vào Word.
+2. **Kiểm thử tải phòng thi:** giả lập 500–1000 học sinh nộp cùng lúc, đo độ trễ lưu; thêm sao lưu SQLite định kỳ.
+3. **Nhập danh sách lớp hàng loạt** từ Excel và in phiếu tài khoản; SSO nếu Sở có.
+4. **Hiệu chỉnh mô hình năng lực** bằng dữ liệu thật (IRT 2 tham số cho câu đủ lượt làm), dùng độ khó thật để sinh đề.
+5. **Chạy thử AI với khóa thật** và đo chất lượng: tỉ lệ câu AI tạo được giáo viên duyệt không sửa, độ chính xác đọc ảnh đề.
+
+## 6. Bản 0.2 — sẵn sàng dùng (19/10/2026)
+
+- Thiết lập lần đầu trên trình duyệt: tạo trường thật + tài khoản quản lý (tùy chọn kèm 64 câu mẫu), hoặc trường mẫu. Không còn tự tạo trường mẫu; trang đăng nhập chỉ hiện tài khoản mẫu khi đang chạy trường mẫu.
+- Nhập danh sách học sinh/giáo viên hàng loạt (dán từ Excel, bỏ qua dòng tiêu đề và cột STT, tự tạo lớp, tên đăng nhập không trùng), in phiếu tài khoản, tải CSV.
+- Sao lưu tự động (khởi động + mỗi 6 giờ, giữ 14 bản) bằng `VACUUM INTO`, nút sao lưu ngay; `npm run reset` chép bản cũ trước khi xóa.
+- Máy chủ in địa chỉ mạng LAN; phiếu tài khoản và trang giao đề ghi địa chỉ đó cho học sinh.
+- `Chay SmartExam.bat`: bấm đúp để cài, build, chạy và mở trình duyệt.
+
+Kiểm thử: `npm run check` → **50/50 test đạt** (thêm `tests/setup.test.mjs`: thiết lập, nhập hàng loạt, sao lưu đọc lại được). Dùng thử trong trình duyệt: màn hình thiết lập → "Dùng trường mẫu" → nhập danh sách 2 học sinh có dòng tiêu đề → phiếu tài khoản hiện đúng.
+Chưa thử: học sinh truy cập thật từ máy khác qua mạng LAN (phụ thuộc tường lửa Windows của máy chủ); bấm đúp file `.bat` trên máy chưa cài thư viện.
+
+## 7. Bản 0.3 — Nâng cấp 1: nhiều mã đề (25/10/2026)
+
+**Đã làm (có test):**
+- `makeVariants(items, n, seed)` sinh 1–8 mã (101…108); layout từng mã được **lưu bền** trong `exams.variants_json`; đề cũ chưa có layout vẫn xuất như trước (sinh lại từ seed cũ).
+- Chùm dữ kiện: cột mới `questions.group_id` (nhận qua POST/PUT câu hỏi, kèm vào `items` của đề). Câu cùng nhóm và cùng phần luôn liền nhau, giữ thứ tự gốc. Chưa có ô nhập nhóm trên giao diện và nhập Word chưa tự nhận chùm.
+- Chia mã: `assignVariants` (ngẫu nhiên đều theo seed, hoặc theo danh sách `variantList`; em ngoài danh sách chia đều phần còn lại). `POST /api/assignments` nhận `variantMode`, `variantList`, `variantSeed`; lưu `assignments.variant_map_json`; `attempts.variant_code` ghi mã đã thi. Thay đổi hành vi: trước đây mỗi học sinh một bản đảo riêng, nay thi theo đúng mã in trong Word.
+- API mới: `GET /api/exams/:id/answer-key` (đáp án chéo), `GET /api/assignments/:id/variants` (mã của từng em, chỉ giáo viên phụ trách lớp).
+- Word: thêm trang "Bảng đáp án chéo giữa các mã đề"; công thức OMML không đổi.
+- Di trú `migrate()` trong `server/db.mjs`: thêm 4 cột vào CSDL cũ, chạy lại an toàn.
+- Test mới `tests/variants.test.mjs` (8 test): cùng seed → cùng kết quả, chùm liền nhau, đáp án đúng sau đảo, cùng lựa chọn → cùng điểm ở 8 mã, đáp án chéo khớp, chia mã, di trú, luồng HTTP đầu-cuối.
+
+**Chưa làm / chưa kiểm thử:**
+- Giao diện: chưa có ô chọn chế độ chia mã / nhập nhóm câu (API sẵn sàng). Chưa kiểm thử mở file Word có bảng chéo bằng Microsoft Word thật (chỉ kiểm tra XML).
+- Bài giao cũ không có bảng chia mã: em vào lớp muộn được chia theo băm cố định.
+- Dữ liệu mẫu (`seed.mjs`) vẫn dùng layout riêng từng em, không có `variant_code`.
+
+## 8. Bản 0.3 — Nâng cấp 2: ôn tập giãn cách (25/10/2026)
+
+**Đã làm (có test):**
+- `shared/spaced.mjs` — hàm thuần `scheduleReview(trạng thái, đúng/sai, thời điểm)` → `{state, action}`; ngày tính theo lịch Asia/Ho_Chi_Minh (ranh giới 17:00 UTC). Bậc 1–3–7–14–30 ngày; sai → về bậc đầu (hẹn 1 ngày, tính `lapses`); đúng → lên bậc; đúng ở bậc cuối → ra khỏi sổ.
+- Không ôn hai lần một câu trong một ngày (`skip`). Quy tắc thêm: làm đúng khi chưa đến hạn thì không lên bậc (`early`), tránh lên bậc bằng cách làm lại mỗi ngày; làm sai thì luôn về bậc đầu.
+- Cột `review_items.due_day`, `last_day`; mục cũ được suy ra `due_day` từ `due_at` (test di trú).
+- API: `GET /api/student/review/due` (đến hạn hôm nay, chỉ của chính em, kèm số ngày quá hạn), `GET /api/teacher/review-stats[?classId]` (mỗi lớp mình phụ trách: số em có câu quá hạn, từng em đến hạn/quá hạn/quá hạn lâu nhất; quản lý xem cả trường).
+- Chế độ luyện tập "ôn lại" và số câu đến hạn trong hồ sơ dùng `due_day`.
+- Test mới `tests/spaced.test.mjs` (8 test).
+
+**Chưa làm / lưu ý:** giao diện chưa hiển thị thống kê quá hạn cho giáo viên. `updateReview` cũ trong `shared/diagnose.mjs` không còn được dùng ở máy chủ (giữ lại vì test cũ). Chưa kiểm thử giờ mùa hè (Việt Nam không có).
+
+## 9. Bản 0.3 — Nâng cấp 3: nhật ký và kiểm soát quyền (25/10/2026)
+
+**Đã làm (có test, `tests/audit.test.mjs`, 9 test):**
+- `audit_log` thêm cột `target`, `old_json`, `new_json`, `reason`, `outcome` (`ok` | `denied`); di trú an toàn cho nhật ký cũ (test). **Chỉ thêm**: trigger SQLite chặn UPDATE/DELETE, API không có đường sửa/xóa (404).
+- Thao tác nhạy cảm, mỗi lần thành công đúng **một** dòng (ai, lúc nào, đối tượng, giá trị cũ/mới, lý do):
+  - mở lại lượt thi `POST /api/attempts/:id/reopen` (lý do bắt buộc ≥ 5 ký tự; xóa bằng chứng cũ của lượt, đặt hạn mới);
+  - sửa điểm `POST /api/attempts/:id/score` (lý do bắt buộc, điểm 0–10);
+  - gia hạn bài giao `POST /api/assignments/:id/extend` và bài làm `POST /api/attempts/:id/extend`;
+  - xóa câu `DELETE /api/questions/:id` (xóa mềm → lưu trữ, lý do bắt buộc);
+  - đổi đáp án câu **đã dùng** (đã có bằng chứng hoặc nằm trong đề) qua `PUT /api/questions/:id` — lý do bắt buộc; đổi chỗ khác chỉ là `question_edit`;
+  - xuất dữ liệu: `GET /api/assignments/:id/export.csv` (điểm theo lớp) và xuất Word đề;
+  - đặt lại mật khẩu (không ghi mật khẩu vào nhật ký); nhận bài nộp muộn có điểm cũ/mới.
+- Quyền kiểm tra ở API: giáo viên chỉ tác động lên lớp mình phụ trách; sửa/xóa/đổi đáp án câu chỉ người tạo hoặc quản lý; thao tác chéo trường bị chặn. Mọi lần bị từ chối ghi một dòng `outcome = denied` vào nhật ký của trường người thử (sai vai trò: dòng `denied` kèm đường dẫn API; sai đối tượng: dòng theo tên thao tác). Việc "ẩn câu" hàng loạt giờ cũng cần là người tạo/quản lý.
+- `GET /api/admin/audit` (chỉ quản lý) thêm bộ lọc `action`, `outcome`, `beforeId` và trả đủ cột mới; chỉ thấy trường mình. Nhãn tiếng Việt cho các thao tác mới trong `Admin.tsx`.
+
+**Chưa làm / hạn chế:**
+- Giao diện chưa có nút mở lại / sửa điểm / gia hạn / xuất CSV / ô nhập lý do (API sẵn sàng).
+- Mở lại lượt thi không hoàn tác XP, chuỗi ngày và lịch ôn đã tính từ lần nộp trước.
+- Yêu cầu sai dữ liệu (thiếu lý do, điểm ngoài thang) trả 400 và không ghi nhật ký; yêu cầu chưa đăng nhập không ghi.
+- Các thao tác cũ (đăng nhập, tạo đề…) vẫn ghi như trước, chưa có giá trị cũ/mới. Giáo viên chưa có trang xem nhật ký của riêng mình.
+
+## 10. Bản 0.3 — Nâng cấp 4: dữ liệu trang Tiến bộ (25/10/2026)
+
+**Đã làm (có test, `tests/progress.test.mjs`, 8 test):**
+- `shared/progress.mjs` (hàm thuần) + `GET /api/student/progress` (chỉ học sinh; không nhận mã học sinh từ đường dẫn hay tham số nên chỉ trả dữ liệu của chính người đăng nhập; giáo viên bị 403).
+- Năng lực theo chuyên đề: tỉ lệ đúng trong 90 ngày, trọng số giảm dần theo thời gian (bán rã 30 ngày) và theo mức độ (1 / 1,5 / 2). Không dùng tiên nghiệm. **Dưới 5 câu**: `insufficientData: true`, `value` và `band` là `null`, chỉ trả số câu.
+- Xu hướng 4 tuần: 4 cửa sổ 7 ngày tính đến hôm nay (giờ Việt Nam), độ chính xác từng tuần (cần ≥ 5 câu), hướng lên/xuống/giữ (ngưỡng ±5 điểm %) so nửa đầu với nửa sau; thiếu dữ liệu thì `direction: null`.
+- Chuỗi ngày học (hiện tại, dài nhất, đã học hôm nay) tính từ bảng hoạt động, còn sống nếu hôm qua có học.
+- Số câu đến hạn ôn; mục tiêu tuần (thứ Hai → Chủ nhật giờ VN) = 5 ngày × 10 câu = 50 câu, kèm đã làm / còn thiếu / đã đạt.
+- `src/pages/student/Progress.tsx`: thêm khối số liệu mới bằng `Bar`, `pct` và các lớp CSS sẵn có; giữ nguyên `ProfileView` bên dưới (không đổi CSS, bố cục).
+
+**Chưa làm / chưa kiểm thử:**
+- **Chưa xem trang Progress.tsx trên trình duyệt thật** (mới qua typecheck và build). Phần mục tiêu tuần dùng hằng số 50 câu, chưa cho học sinh hay giáo viên tự đặt.
+- Bảng "Năng lực" cũ trong `ProfileView` (có tiên nghiệm) và khối mới cùng hiện, hai cách tính có thể lệch số; nên gộp ở đợt làm giao diện.
+- Ngưỡng 5 câu, bán rã 30 ngày, ngưỡng yếu/khá/vững là giả định, chưa hiệu chỉnh bằng dữ liệu thật.
+
+## 11. Tổng kết đợt 4 nâng cấp
+
+`npm run check` (25/10/2026, Windows, Node 24): typecheck sạch, **83/83 test đạt** (trước đợt: 50), build thành công. Thêm 4 file test: `variants`, `spaced`, `audit`, `progress`. Mỗi nâng cấp có một commit riêng.
+
+**Cần bạn quyết định:**
+1. Học sinh thi theo mã đề in trong Word (đã làm) thay cho bản đảo riêng từng em — xác nhận lại nếu muốn quay về bản riêng.
+2. Giao diện còn thiếu cho các API mới: chọn chế độ chia mã / nhập nhóm câu, thống kê quá hạn cho giáo viên, nút mở lại / sửa điểm / gia hạn / xuất CSV kèm ô lý do.
+3. Mở lại lượt thi có nên hoàn tác XP, chuỗi ngày, lịch ôn đã tính không (hiện không).
+
+## 12. Giai đoạn 0 — nền tảng và kiểm thử thật (25/10/2026)
+
+**Kiểm thử thật đã chạy (`tests/reliability.test.mjs`, 8 test):**
+- **PDF thật**: `tests/fixtures/de-xuat-tu-word.pdf` do Microsoft Word xuất từ đề mẫu. Lần đầu nhập lộ 2 lỗi thật: chữ bị tách từng dấu ("Giá tr ị c ủ a"), và tiêu đề "PHẦN III" dính vào phương án D. Đã sửa (`joinRow` trong `server/importers.mjs`: chỉ chèn dấu cách khi khoảng hở đủ lớn; chuẩn hóa NFKC đổi chữ toán in nghiêng 𝑥 → x). Sau sửa: tách đúng 2 câu, phương án sạch. **Giới hạn còn lại**: phân số xếp chồng trong PDF vẫn mất cấu trúc (ví dụ ½ biến mất), vẫn kèm cảnh báo bắt kiểm tra tay; PDF không mang dấu gạch chân nên không nhận đáp án.
+- **Excel thật**: `tests/fixtures/mau-excel-that.xlsx` do Microsoft Excel 16 lưu (ô số, ô chữ, công thức LaTeX, dấu phẩy). Nhập đúng 5 câu, ô số `1` không thành `1.0`, đáp án `1.5` nhận cả `1,5` và `3/2`.
+- **Word thật** vẫn nhập đúng sau thay đổi giới hạn file nén.
+- **Tải**: 300 học sinh bắt đầu → lưu → nộp (1/3 số em nộp lặp song song): 1000 yêu cầu trong 1,9 giây, p50 196 ms, p95 241 ms, lớn nhất 256 ms (cùng máy với máy chủ, SQLite trong bộ nhớ, đợt 100 kết nối một lúc). Đúng 300 bài, không trùng, không ghi bằng chứng hai lần.
+- **Đăng nhập đồng thời**: trước đây băm mật khẩu (scrypt) chạy ngay trên luồng chính, ~50 ms/lần nên 500 học sinh đăng nhập đầu giờ có thể làm máy chủ đứng hơn 20 giây. Nay chạy bằng `crypto.scrypt` bất đồng bộ (`verifyPasswordAsync`); 100 đăng nhập song song, trang khác vẫn phản hồi ≤ 220 ms. Đăng nhập tên không tồn tại cũng băm một lần để không lộ tên đăng nhập qua thời gian trả lời.
+- **Sao lưu và khôi phục**: thêm `server/restore.mjs` (`npm run restore -- data/backups/<file>.db`; phải tắt máy chủ trước). Kiểm tra `integrity_check` và đủ bảng trước khi thay, giữ bản đang dùng thành `*.truoc-khoi-phuc-<giờ>`. Test: xóa dữ liệu → khôi phục → số tài khoản, bài làm và máy chủ khởi động lại đều đúng; bản hỏng/không tồn tại bị từ chối; giữ tối đa N bản sao lưu.
+- **Bảo mật**: chặn file nén "bom" (>150 MB sau giải nén) cho Word và Excel.
+
+**Chưa kiểm thử / hạn chế thật:**
+- Thử tải chạy trong cùng một tiến trình với máy chủ, chưa thử bằng nhiều máy qua Wi-Fi lớp học. **Phát hiện**: 300 kết nối mở cùng một lúc trên Windows 11 thường bị từ chối (`ECONNREFUSED`) vì hàng đợi kết nối của hệ điều hành nhỏ; khi đó phải rải học sinh vào theo đợt ≤ 100. Chưa thêm tự thử lại kết nối ở phía trình duyệt.
+- Chưa thử Safari/iOS, chưa thử PDF scan (cần AI), chưa có khóa AI nên các chức năng AI vẫn chưa kiểm thử thật.
+- Chưa có giao diện nút khôi phục: khôi phục làm bằng dòng lệnh.
+
+## 13. Giai đoạn 1 — nhập đề chính xác (25/10/2026)
+
+Chi tiết số liệu và giới hạn ở `docs/do-chinh-xac.md`. `npm run check`: 113/113 test đạt, build thành công.
+
+- **Hình và bảng** (`tests/images.test.mjs`): đọc hình PNG/JPEG/GIF/WebP từ Word (nhận dạng theo nội dung, tối đa 5 MB/hình, 60 hình/file, loại SVG/EMF/WMF), lưu vào bảng `images` của trường (khử trùng theo SHA-256), câu hỏi giữ dấu `[[img:N]]`. API `GET /api/images/:id` chỉ trong cùng trường. Bảng dữ liệu (bảng biến thiên…) thành dòng `| a | b |` — bảng đáp án và bảng phương án xếp cột vẫn đọc như cũ. Giao diện hiển thị hình và bảng (đã xem trên trình duyệt thật, hình 360×240 nạp được). **Xuất Word**: hình và bảng được nhúng lại; file xuất mở được trong Microsoft Word (2 hình, 5 bảng), nhập lại ra đúng hình (cùng SHA-256). Hình vẽ khối/biểu đồ của Word chưa nhập được (đánh dấu `[hình]`).
+- **Đáp án nhiều nguồn** (`tests/importreview.test.mjs`): đối chiếu dấu gạch chân/màu/`*`, dòng "Đáp án", "Chọn X" trong lời giải, bảng đáp án, file đáp án rời. Khớp → nhận và ghi nguồn; **mâu thuẫn → để trống, nêu rõ từng nguồn nói gì**. API `POST /api/import/answers` (Word, PDF, Excel, CSV, txt, bảng dọc) và `POST /api/import/apply-key`.
+- **Bộ đo độ chính xác**: `npm run bench`, 11 kiểu trình bày × 64 câu + bộ 42 câu để dành; test giữ ngưỡng (đáp án sai = 0, lỗi âm thầm = 0).
+- **Màn hình duyệt sau nhập** (`Import.tsx`): câu đáng ngờ xếp trước, lý do cụ thể, "So bản gốc" cạnh bản đã tách, nút "Nạp file đáp án rời". Đã thử trên trình duyệt thật bằng đoạn văn bản dán.
+- **Công thức** (`tests/formulas.test.mjs`): 33 công thức do Word dựng (ma trận, hệ, tích phân, giới hạn, véc-tơ, ℝ ℕ, phần nguyên…) đều đọc ra LaTeX mà KaTeX hiển thị được; thêm `f'`, `\mathbb`, tiền chỉ số, khung, `\overset`; cấu trúc OMML lạ và MathType OLE được **báo rõ** (cảnh báo + độ đáng ngờ cao).
+- Lỗi thật đã sửa: đáp án viết liền "ĐSĐS"; `6\%` mất dấu `\`; khoảng trắng thừa quanh công thức; bộ phân loại chuyên đề coi "một" là "mốt".
+
+**Chưa làm / hạn chế:** chưa có đề thật để đo; PDF chỉ thử một file; chưa thử trên Word do người dùng thật soạn; chưa có ô chèn/vẽ hình trong trình soạn câu hỏi.
+
+## 14. Giai đoạn 2 — vận hành hằng ngày (25/10/2026)
+
+`npm run check`: 121/121 test đạt (thêm `tests/ops.test.mjs`, 8 test), build thành công.
+
+- **Excel/CSV đúng tiếng Việt** (mục 10): `shared/xlsxWrite.mjs` ghi .xlsx thật (UTF-8, số là số, tiêu đề in đậm và cố định, chuỗi bắt đầu bằng `= + - @` được vô hiệu hóa để Excel không chạy công thức). **Đã mở thử bằng Microsoft Excel 16**: tên có dấu đúng, ô điểm là số (Double), tiêu đề đậm, `=1+1` không bị tính. API: `GET /api/assignments/:id/export.xlsx` (và `.csv` có thêm cột "Nộp lúc", trạng thái tiếng Việt), `GET /api/questions/export.xlsx` (đúng định dạng mẫu nhập: xuất rồi nhập lại ra đúng câu — có test). Cả hai ghi nhật ký `data_export`; chỉ giáo viên phụ trách lớp.
+- **Lịch sử phiên bản câu hỏi** (mục 8): bảng `question_versions` lưu trạng thái TRƯỚC mỗi lần sửa (sửa tay, hàng loạt, khôi phục). `GET /api/questions/:id/versions`, `POST /api/questions/:id/restore`. Khôi phục đáp án của câu đã dùng cần lý do và đúng người (như đổi đáp án), ghi `question_answer_change`.
+- **Thao tác hàng loạt có hoàn tác** (mục 8): `POST /api/questions/bulk` (đổi chuyên đề, mức độ, lưu trữ, khôi phục về nháp; tối đa 500 câu; chỉ câu của mình hoặc quản lý), mỗi đợt một dòng nhật ký, `POST /api/questions/bulk/:id/undo` — không ghi đè câu đã được sửa tiếp sau đợt đó, chỉ hoàn tác một lần, chỉ người thực hiện/quản lý. Giao diện Ngân hàng: chọn nhiều câu → "Đổi chuyên đề…/Đổi mức độ…", nút "Hoàn tác", "Xuất Excel".
+- **Mẫu ma trận đề** (mục 7): `GET/POST/DELETE /api/blueprints` (số câu từng phần, tỉ lệ mức độ, chuyên đề, thời gian; riêng tư hoặc dùng chung trong trường; chuyên đề lạ bị loại). **Nhân bản đề** `POST /api/exams/:id/clone` (mã đề mới; câu còn dùng lấy bản mới nhất, câu đã lưu trữ giữ bản đã chụp); nút "Nhân bản đề" trên trang Đề thi.
+- **Giao đề hẹn giờ, nhiều lớp một lúc** (mục 7): đã có từ trước; nay có test: giao nhiều lớp cùng lúc, chặn giao cho lớp người khác dạy, bài chưa tới giờ mở trả "chưa mở" và hiện `upcoming`, tới giờ vào được.
+- Mục 9 (nhật ký, kiểm soát mở lại lượt thi / sửa điểm) đã làm ở nâng cấp 3.
+
+**Chưa làm / hạn chế:** giao diện chưa có màn quản lý mẫu ma trận (API sẵn sàng; trang Ra đề chưa có nút "lưu/dùng mẫu"), chưa có màn xem lịch sử phiên bản; mẫu "đề" hiểu là nhân bản đề + mẫu ma trận (chưa có kho đề mẫu dựng sẵn). Xuất Excel bảng điểm chưa kèm điểm từng phần/từng câu.
+
+## 15. Giai đoạn 3 — học thông minh (25/10/2026)
+
+`npm run check`: 127/127 test đạt (thêm `tests/learning.test.mjs`, 6 test). Các mục 11 (ôn giãn cách), 12 (luyện tập thích ứng), 14 (trang tiến bộ) đã có ở nâng cấp 2, 4 và bản trước.
+
+- **Lời giải do AI viết chỉ là NHÁP** (mục 13): `POST /api/ai/explain` không còn tạo câu mới; lời giải nháp nằm riêng (`explanation_draft`), học sinh không thấy (có test: bài làm, kết quả, đều không chứa nháp). Prompt yêu cầu giải từng bước, giải thích vì sao phương án khác sai (kiểu lỗi) và kết thúc bằng dòng "Đáp án: X"; máy đọc dòng đó và **so với đáp án đã duyệt**: lệch → cảnh báo trong giao diện, `POST /api/questions/:id/draft/approve` trả 409 trừ khi xác nhận (`confirmMismatch`), ghi nhật ký `explanation_approve` kèm lời giải cũ/mới; có thể sửa tay trước khi duyệt hoặc `draft/reject`. Duyệt lưu phiên bản lời giải cũ. Phần AI **chưa kiểm thử với khóa thật** (test dùng AI giả lập trả lời theo kịch bản).
+- **Từ kết quả đến hành động một chạm** (mục 15): `GET /api/classes/:id/weak-groups` (học sinh dưới 50% ở một chuyên đề, đã làm ≥ 3 câu) và `POST /api/classes/:id/practice-assignment` — tự chọn câu đã duyệt của chuyên đề (ưu tiên câu các em chưa làm, thiên về mức dễ/vừa), tạo đề và **bài giao chỉ cho nhóm đó** (cột `assignments.target_json`). Học sinh ngoài nhóm không thấy và không vào được; báo cáo, bảng điểm Excel và danh sách mã đề chỉ gồm các em được giao. Chỉ giáo viên phụ trách lớp; mọi lần từ chối được ghi. Trang lớp có thẻ "Nhóm cần hỗ trợ" với nút "Giao phiếu luyện"; Ngân hàng hiện lời giải nháp kèm nút Duyệt/Bỏ.
+
+**Chưa làm / hạn chế:** phiếu luyện chưa có lời nhắc/thông báo cho học sinh ngoài danh sách việc trong trang chủ; chưa có bước giáo viên xem trước/sửa phiếu trước khi giao (giao ngay); "giải thích kiểu lỗi" dùng chung lời giải AI và nhãn nhiễu sẵn có, chưa có luồng riêng cho từng kiểu lỗi.
+
+## 16. Giai đoạn 4 — thi an toàn và công bằng (25/10/2026)
+
+`npm run check`: 134/134 test đạt (thêm `tests/integrity.test.mjs`, 7 test). Mục 16 (lưu bài liên tục, nộp lặp) và 17 (tín hiệu bất thường, chỉ để tham khảo) đã có từ bản đầu và có test tải ở giai đoạn 0.
+
+- **Mỗi em một thứ tự riêng** (mục 16): `variantMode: 'per_student'` khi giao đề — bố cục (thứ tự câu trong phần + thứ tự phương án) riêng theo (bài giao, học sinh), lưu cố định (tải lại trang vẫn như cũ), chấm qua ánh xạ; cùng lựa chọn ở mọi bố cục cho cùng điểm. Không có mã đề chung ở chế độ này (cột mã đề để trống).
+- **Phân tích câu** (mục 18): đã có tỉ lệ điểm, độ phân biệt, phương án bị chọn; thêm cờ "phương án nhiễu không ai chọn" (từ 10 bài trở lên). Test: khóa nhập sai → cờ "Quá khó hoặc sai đáp án" + "phương án B được chọn nhiều hơn đáp án".
+- **Sửa đáp án đề đã giao và chấm lại**: `POST /api/exams/:id/fix-answer` (người ra đề hoặc quản lý; lý do bắt buộc) sửa đáp án trong đề, chấm lại mọi bài đã nộp, **giữ nguyên giờ nộp và không cộng thưởng/XP lần hai**; ghi một dòng nhật ký với đáp án cũ/mới và số bài đổi điểm. Nút "Sửa đáp án đề và chấm lại" xuất hiện cạnh câu bị cờ trong báo cáo.
+- **Khiếu nại điểm**: bảng `score_appeals`. Học sinh gửi từ trang kết quả (chỉ bài đã nộp, đã xem được kết quả, trong 14 ngày, lý do ≥ 10 ký tự, mỗi câu một khiếu nại đang chờ, tối đa 5). Giáo viên phụ trách lớp xem danh sách (`/khieu-nai`), chấp nhận (nhập điểm mới hoặc cho điểm cả câu) hoặc từ chối — ghi chú bắt buộc, một dòng nhật ký có điểm trước/sau. Người lớp khác / trường khác bị từ chối và được ghi nhận.
+
+**Chưa làm / hạn chế:** chấm lại không cập nhật lại lịch ôn giãn cách đã tính lúc nộp; sửa đáp án đề chưa tự sửa luôn ngân hàng câu hỏi (làm riêng ở Ngân hàng, có nhật ký); chưa có thông báo cho học sinh khi khiếu nại được trả lời (xem ở mục khiếu nại của em qua API `GET /api/student/appeals`, chưa có màn riêng); không có chế độ khóa máy — chống gian lận chỉ là tín hiệu.
+
+## 17. Giai đoạn 6 (phần a) — chia sẻ và duyệt (25/10/2026)
+
+`tests/sharing.test.mjs` (6 test) đạt; chưa chạy lại toàn bộ `npm run check` sau phần này.
+
+- **Đề riêng/dùng chung** (mục 22): đề mới mặc định riêng tư; `POST /api/exams/:id/share` (chỉ người ra đề/quản lý, có nhật ký); đề dùng chung cả trường xem, xuất Word, nhân bản, giao cho lớp mình; đề cũ được giữ là dùng chung (di trú). Nhãn tổ (`dept`) để lọc, `GET /api/exams?scope=mine|shared|hot`. Xếp "hot" = lượt giao bài + nhân bản + sao × √số người đánh giá; `POST /api/exams/:id/rate` (không tự đánh giá, không đánh giá đề riêng).
+- **Bình luận** (mục 23) trên câu hỏi và đề (chỉ thêm, chỉ giáo viên trong trường). **Duyệt hai người**: quản lý đặt `reviewPolicy = double` (`PUT /api/admin/settings`, có nhật ký); cần hai người khác nhau duyệt, ít nhất một người không phải tác giả; sửa nội dung câu đã duyệt thì phải duyệt lại.
+
+**Chưa làm (hết hạn mức sử dụng):** giao diện cho phần chia sẻ/xếp hạng/bình luận/duyệt hai người; mục 24 (báo cáo định kỳ, so sánh lớp/kỳ), mục 25 (cổng phụ huynh, PWA); giai đoạn 5 (giao diện — cần bạn chọn hướng thiết kế).
+
+## 18. Hoàn thiện giai đoạn 5 và phần còn lại của 6 (25/10/2026)
+
+Đã bổ sung các phần còn thiếu trong bàn giao trên, trên nhánh `codex/finish-smartexam`.
+
+- **Chia sẻ và cộng tác:** kho đề lọc riêng/chung/tổ/được dùng nhiều, đánh giá sao cá nhân, góp ý đề/câu hỏi; cấu hình duyệt trong Tài khoản, nhãn chờ lượt hai. Sửa nội dung, lời giải, nhãn, khôi phục và sửa/hoàn tác hàng loạt đều bỏ lượt duyệt cũ khi bật hai người.
+- **Vận hành:** lịch sử/khôi phục câu hỏi có lý do; lưu/dùng/xóa mẫu ma trận; nhóm câu chung dữ kiện; chia mã riêng/ngẫu nhiên đều/chỉ định danh sách; lùi giờ đóng, gia hạn lượt thi, mở lại và sửa điểm tổng; học sinh có trang xem khiếu nại và phản hồi. Giữ phân quyền và nhật ký API hiện có.
+- **Báo cáo:** `server/reports.mjs`, `PeriodicReports.tsx`. Kỳ ngày Việt Nam bao gồm bài giao có ngày mở, hạn đóng hoặc bài nộp trong kỳ; đếm người tham gia không trùng, xét nhóm đích và học sinh hoạt động. Điểm trung bình chỉ tính bài đã nộp có kết quả công bố. So sánh lớp/kỳ liền trước cùng số ngày, xuất XLSX; bản lưu giữ số liệu tại lúc tạo. Lịch tuần/tháng chạy mỗi phút, tạo bù tối đa 24 kỳ/lịch/lần, chống trùng; mất phân công lớp thì dừng lịch và mất quyền xem bản lưu. Không gửi email hoặc thông báo ngoài ứng dụng.
+- **Phụ huynh:** mã ngẫu nhiên có thời hạn do giáo viên phụ trách/quản lý cấp riêng từng học sinh, chỉ lưu hash; cookie phiên riêng HttpOnly/SameSite; đổi/thu hồi mã vô hiệu hóa phiên cũ. Chỉ trả kết quả, năng lực từ bằng chứng đã công bố và tình hình nộp bài; không trả đáp án, lời giải, tên đăng nhập hoặc dữ liệu người khác. Có hạn chế đoán mã, tự chốt bài hết giờ và tôn trọng hạn gia hạn từng em. Phản hồi HTTP cũ không thể hiện lại dữ liệu sau đăng xuất.
+- **PWA:** manifest, biểu tượng PNG 180/192/512, service worker, trang ngoại tuyến, cài đặt/cập nhật/kết nối. Cache chỉ tài nguyên tĩnh công khai, tối đa 64 mục; không cache API, dữ liệu cá nhân hay HTML điều hướng. Không tự tải lại trang thi. Cài đặt cần HTTPS/localhost; LAN HTTP tiếp tục dùng trình duyệt.
+- **Giao diện chung:** nền sáng xanh, tăng tương phản/cỡ chữ; menu điện thoại tối đa năm mục, Thêm chứa mục phụ; focus bàn phím trong hộp thoại, liên kết bỏ qua điều hướng, giảm chuyển động và bỏ qua phản hồi tải dữ liệu cũ.
+
+**Kiểm chứng:** `npm run check` đạt **173/173 test**, TypeScript sạch, build thành công. Rà soát độc lập phát hiện và đã sửa: tự chốt bài qua nửa đêm, phụ huynh không tự chốt bài/hạn riêng và phản hồi muộn sau đăng xuất. Test đã tái hiện thất bại trước khi sửa. Có thêm test bài giao kéo dài qua kỳ và báo cáo tự lưu chờ hết ân hạn mạng. Kiểm tra trình duyệt dùng CSDL mẫu trong RAM: giáo viên/báo cáo desktop và điện thoại, lưu báo cáo, menu Thêm, cấp mã → đăng nhập phụ huynh, đánh giá sao, gửi/hiện góp ý; không tràn ngang ở màn điện thoại, không có lỗi console trong luồng đã thử.
+
+**Giới hạn thực tế:** AI vẫn cần khóa thật để kiểm chứng. Chưa thử cài PWA trên thiết bị iOS/Android thật hoặc thi nhiều máy qua Wi-Fi; test tải hiện tại là mô phỏng. Báo cáo dùng danh sách học sinh hoạt động và phân công hiện tại, chưa lưu lịch sử chuyển lớp; bản báo cáo lưu giữ số liệu cũ. Phụ huynh dùng mã riêng, chưa có SSO/email/SMS. Build còn cảnh báo bundle JavaScript lớn, không chặn build.

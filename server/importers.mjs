@@ -1,0 +1,197 @@
+// Nhập đề từ file: Word, PDF (văn bản hoặc scan qua Gemini Multimodal / OCR cục bộ), Excel/CSV, văn bản và ảnh.
+import { readDocx } from '../shared/docx.mjs';
+import { parseExamText, parseAnswerFileText } from '../shared/parse.mjs';
+import { assessQuestion } from '../shared/review.mjs';
+import { readXlsx, parseCsv, rowsToQuestions } from '../shared/sheet.mjs';
+import { classifyQuestion } from '../shared/classify.mjs';
+import { validateMathExpression } from '../shared/math-engine.mjs';
+
+/** Nối các mảnh chữ trên một dòng: chỉ chèn dấu cách khi khoảng hở đủ lớn (PDF từ Word tách từng dấu tiếng Việt thành mảnh riêng). */
+function joinRow(items) {
+  let out = '';
+  let prevEnd = null;
+  for (const it of items) {
+    if (prevEnd !== null && it.x - prevEnd > 0.18 * it.h && !/^\s/.test(it.s) && !/\s$/.test(out)) out += ' ';
+    out += it.s;
+    prevEnd = it.x + it.w;
+  }
+  return out.normalize('NFKC').replace(/\s+/g, ' ').trim();
+}
+
+export async function pdfToText(buf) {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), isEvalSupported: false, useSystemFonts: true, disableFontFace: true, verbosity: 0 }).promise;
+  const lines = [];
+  const scannedPages = [];
+  const pageTexts = [];
+  try {
+    for (let p = 1; p <= doc.numPages; p++) {
+      const page = await doc.getPage(p);
+      const content = await page.getTextContent();
+      if (content.items.filter((it) => 'str' in it).map((it) => it.str).join('').replace(/\s/g, '').length < 20) {
+        const ops = await page.getOperatorList();
+        const imageOps = [pdfjs.OPS.paintImageXObject, pdfjs.OPS.paintInlineImageXObject, pdfjs.OPS.paintImageMaskXObject, pdfjs.OPS.paintImageXObjectRepeat];
+        if (ops.fnArray.some((op) => imageOps.includes(op))) scannedPages.push(p);
+      }
+      const rows = new Map();
+      const pageLines = [];
+      for (const it of content.items) {
+        if (!('str' in it)) continue;
+        const y = Math.round(it.transform[5] / 3) * 3;
+        if (!rows.has(y)) rows.set(y, []);
+        rows.get(y).push({ x: it.transform[4], w: it.width ?? 0, h: Math.abs(it.transform[3]) || 10, s: it.str });
+      }
+      [...rows.entries()]
+        .sort((a, b) => b[0] - a[0])
+        .forEach(([, items]) => pageLines.push(joinRow(items.sort((a, b) => a.x - b.x))));
+      lines.push(...pageLines);
+      pageTexts.push(pageLines.join('\n'));
+    }
+    return { text: lines.join('\n'), pages: doc.numPages, scannedPages, pageTexts };
+  } finally {
+    await doc.destroy();
+  }
+}
+
+/** Gắn chuyên đề/mức độ và kiểm định biểu thức toán học cho câu chưa có, giữ lại độ tin cậy để giáo viên xem. */
+export function tagDrafts(questions, kind = null) {
+  return questions.map((q) => {
+    const c = classifyQuestion(q);
+    let mathValid = true;
+    let mathError = null;
+    if (q.type === 'short' && q.answer !== null && q.answer !== undefined && String(q.answer).trim()) {
+      const firstAns = String(q.answer).split(';')[0].trim();
+      const v = validateMathExpression(firstAns);
+      mathValid = v.valid;
+      mathError = v.error ?? null;
+    }
+    const tagged = {
+      ...q,
+      topic: q.topic ?? c.topic,
+      level: q.level ?? c.level,
+      tagConfidence: q.topic ? 1 : c.confidence,
+      topicAlternatives: c.alternatives,
+      mathValid,
+      ...(mathError ? { mathError } : {}),
+    };
+    return { ...tagged, suspicion: assessQuestion(tagged, { kind }) };
+  });
+}
+
+/** Chữ của file đáp án riêng (Word, PDF, Excel/CSV, txt) để đọc bảng đáp án. */
+export async function answerFileToText(name, buf) {
+  const ext = (name.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toLowerCase();
+  if (ext === 'docx') return (await readDocx(buf)).text;
+  if (ext === 'pdf') return (await pdfToText(buf)).text;
+  if (ext === 'xlsx') return (await readXlsx(buf)).map((r) => r.join(' | ')).join('\n');
+  if (ext === 'csv') return parseCsv(buf.toString('utf8')).map((r) => r.join(' | ')).join('\n');
+  if (ext === 'txt' || ext === 'md') return buf.toString('utf8');
+  throw Object.assign(new Error(`File đáp án .${ext} chưa hỗ trợ. Dùng .docx, .pdf, .xlsx, .csv hoặc .txt.`), { status: 400 });
+}
+
+export function answerEntriesFromText(text) {
+  return parseAnswerFileText(text);
+}
+
+/**
+ * Nhập một file. ai: đối tượng AI (có thể null). Trả về { questions, warnings, info, images }.
+ */
+export async function importFile(name, buf, ai, options = {}) {
+  const ext = (name.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toLowerCase();
+  const info = { file: name, kind: ext };
+  let parsed;
+
+  if (ext === 'docx') {
+    const { text, stats, images: pics } = await readDocx(buf);
+    Object.assign(info, stats, { engine: 'Word OMML' });
+    parsed = parseExamText(text);
+    parsed.images = pics;
+    if (stats.importedImages) parsed.warnings.push(`Đã nhập ${stats.importedImages} hình vào câu hỏi. Kiểm tra hình nằm đúng câu.`);
+    if (stats.skippedImages + stats.unreadableImages) parsed.warnings.push(`${stats.skippedImages + stats.unreadableImages} hình/biểu đồ chưa nhập được (định dạng EMF/WMF, biểu đồ hoặc hình vẽ của Word, hoặc quá lớn) — câu đó được đánh dấu [hình]; hãy chụp hình rồi bổ sung.`);
+    if (stats.unknownMath?.length) parsed.warnings.push(`Công thức dùng cấu trúc chưa hỗ trợ (${stats.unknownMath.join(', ')}) — nội dung bên trong vẫn được đọc nhưng hình dạng có thể sai. Kiểm tra các câu có công thức.`);
+    if (stats.oleEquations) parsed.warnings.push(`File có ${stats.oleEquations} công thức MathType (OLE) — chưa đọc được. Trong Word, dùng MathType → Convert Equations sang Office Math rồi nhập lại.`);
+  } else if (ext === 'doc') {
+    throw Object.assign(new Error('File .doc (Word 97–2003) chưa hỗ trợ. Mở bằng Word và lưu thành .docx rồi nhập lại.'), { status: 400 });
+  } else if (ext === 'pdf') {
+    const { text, pages, scannedPages, pageTexts } = await pdfToText(buf);
+    info.pages = pages;
+    if (scannedPages.length || text.replace(/\s/g, '').length < 20) {
+      if (ai?.enabled && typeof ai.extractExamFromImages === 'function') {
+        const { geminiExtractScannedPdf } = await import('./pdf-gemini.mjs');
+        const result = await geminiExtractScannedPdf(buf, pageTexts, ai, options);
+        return {
+          ...result,
+          questions: tagDrafts(result.questions, 'pdf-ai'),
+          info: { ...info, ...result.info },
+        };
+      }
+      if (scannedPages.length) {
+        const { ocrScannedPdf } = await import('./pdf-ocr.mjs');
+        const result = await ocrScannedPdf(buf, pageTexts, options);
+        return {
+          ...result,
+          questions: tagDrafts(result.questions, 'pdf-scan'),
+          info: { ...info, ...result.info },
+        };
+      }
+      throw Object.assign(new Error('PDF không có lớp chữ (bản scan) và chưa bật Gemini AI. Hãy bật GEMINI_API_KEY hoặc dùng bản Word (.docx).'), { status: 400 });
+    }
+    parsed = parseExamText(text);
+    info.engine = 'PDF Text';
+    parsed.warnings.push('PDF văn bản đã được tách câu. Hãy rà soát lại các phân số hoặc ký hiệu đặc biệt trước khi duyệt.');
+  } else if (ext === 'xlsx') {
+    parsed = rowsToQuestions(await readXlsx(buf));
+    info.engine = 'Excel (.xlsx)';
+  } else if (ext === 'csv') {
+    parsed = rowsToQuestions(parseCsv(buf.toString('utf8')));
+    info.engine = 'CSV';
+  } else if (ext === 'txt' || ext === 'md' || ext === 'tex') {
+    parsed = parseExamText(buf.toString('utf8'));
+    info.engine = 'Văn bản / LaTeX';
+  } else if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) {
+    if (!ai?.enabled) {
+      throw Object.assign(new Error('Bóc tách đề từ ảnh cần Gemini Multimodal AI. Cấu hình GEMINI_API_KEY trong Settings > Secrets để sử dụng.'), { status: 503 });
+    }
+    const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+    if (typeof ai.extractExamFromImages === 'function') {
+      const items = await ai.extractExamFromImages([{ data: buf, mimeType: mime, page: 1 }], options);
+      const PART_ROMAN = { 1: 'I', 2: 'II', 3: 'III' };
+      parsed = {
+        questions: items.map((it, idx) => ({
+          part: PART_ROMAN[it.part] ?? (it.type === 'mcq' ? 'I' : it.type === 'tf' ? 'II' : 'III'),
+          num: it.num || idx + 1,
+          type: it.type,
+          stem: it.stem,
+          options: it.options,
+          answer: it.answer,
+          answerSources: it.answer !== null && it.answer !== undefined ? ['ai'] : [],
+          explanation: it.explanation || '',
+          level: it.level,
+          sourceStem: '[[img:img_src]]',
+          ocrText: it.stem,
+          fromAi: true,
+          warnings: it.hasFigure ? ['Ảnh gốc có hình vẽ/đồ thị — kiểm tra đối chiếu trước khi duyệt.'] : [],
+        })),
+        images: [{ key: 'img_src', mime, data: Buffer.from(buf), cx: 5000000, cy: 5000000 }],
+        warnings: ['Đã bóc tách câu hỏi và công thức LaTeX từ ảnh bằng Gemini Multimodal AI. Có thể đối chiếu trực tiếp với ảnh gốc.'],
+      };
+      info.ai = true;
+      info.engine = 'Gemini Multimodal AI';
+    } else {
+      const text = await ai.imageToText(buf, mime);
+      parsed = parseExamText(text);
+      parsed.questions.forEach((q) => (q.fromAi = true));
+      parsed.warnings.push('Chữ trong ảnh do AI đọc. Đối chiếu với ảnh gốc trước khi duyệt.');
+      info.ai = true;
+      info.engine = 'Gemini Vision Text';
+    }
+  } else {
+    throw Object.assign(new Error(`Chưa hỗ trợ file .${ext}. Dùng .docx, .pdf, .xlsx, .csv, .txt hoặc ảnh.`), { status: 400 });
+  }
+  return { questions: tagDrafts(parsed.questions, ext), warnings: parsed.warnings, info, images: parsed.images ?? [] };
+}
+
+export function importText(text) {
+  const parsed = parseExamText(text);
+  return { questions: tagDrafts(parsed.questions), warnings: parsed.warnings, info: { kind: 'text', engine: 'Văn bản / LaTeX' } };
+}

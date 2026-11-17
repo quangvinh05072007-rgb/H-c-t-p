@@ -1,0 +1,401 @@
+/* Teacher Authoring Studio, Smart Import, Unified Bank & Instant Assign Drawer */
+
+/* 1. Slide-over Assign Drawer */
+.assign-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(2px);
+  display: flex;
+  justify-content: flex-end;
+  animation: fadeIn 0.16s ease-out;
+}
+
+.assign-drawer-panel {
+  width: 100%;
+  max-width: 480px;
+  height: 100%;
+  background: var(--surface, #ffffff);
+  border-left: 1px solid var(--line, #e2e8f0);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -12px 0 36px rgba(15, 23, 42, 0.14);
+}
+
+.assign-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--line, #e2e8f0);
+}
+
+.assign-drawer-kicker {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary, #2563eb);
+  margin-bottom: 3px;
+}
+
+.assign-drawer-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+  line-height: 1.35;
+}
+
+.assign-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+}
+
+.assign-drawer-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line, #e2e8f0);
+  background: var(--surface-subtle, #f8fafc);
+}
+
+.assign-class-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+  gap: 8px;
+}
+
+.assign-class-tile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line, #e2e8f0);
+  background: var(--surface, #ffffff);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.assign-class-tile:hover {
+  border-color: var(--primary, #2563eb);
+}
+
+.assign-class-tile.is-checked {
+  border-color: var(--primary, #2563eb);
+  background: var(--primary-soft, #eff6ff);
+}
+
+.assign-class-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--line, #cbd5e1);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--surface, #ffffff);
+  color: #ffffff;
+}
+
+.assign-class-tile.is-checked .assign-class-check {
+  background: var(--primary, #2563eb);
+  border-color: var(--primary, #2563eb);
+}
+
+.assign-class-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assign-class-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--ink-3, #64748b);
+  margin-top: 2px;
+}
+
+/* 2. ExamBuilder Hybrid A4 Action Strip & 4-Tab Inspector */
+.a4-question-card {
+  position: relative;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 0 -10px 8px;
+  border: 1px solid transparent;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.a4-question-card:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.a4-question-card.is-selected {
+  border-color: #2563eb;
+  background: #f0f7ff;
+}
+
+.a4-q-inline-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+  font-family: var(--font-body, 'Plus Jakarta Sans', system-ui, sans-serif);
+}
+
+.a4-question-card:hover .a4-q-inline-tools,
+.a4-question-card.is-selected .a4-q-inline-tools,
+.a4-q-inline-tools:focus-within {
+  opacity: 1;
+}
+
+.a4-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.a4-tool-btn:hover:not(:disabled) {
+  border-color: #2563eb;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.a4-tool-btn.is-danger:hover:not(:disabled) {
+  border-color: #dc2626;
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+.a4-tool-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.builder-inspector-col {
+  padding: 0 !important;
+  overflow: hidden;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 12px;
+  position: sticky;
+  top: 72px;
+  max-height: calc(100vh - 90px);
+  display: flex;
+  flex-direction: column;
+}
+
+.inspector-tabs-nav {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid var(--line, #e2e8f0);
+  background: var(--surface-subtle, #f8fafc);
+}
+
+.inspector-tab-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 9px 4px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3, #64748b);
+  cursor: pointer;
+  transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+
+.inspector-tab-btn.active {
+  color: var(--primary, #2563eb);
+  border-bottom-color: var(--primary, #2563eb);
+  background: var(--surface, #ffffff);
+  font-weight: 700;
+}
+
+.inspector-body {
+  padding: 14px 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.builder-bank-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.builder-bank-item {
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: var(--surface, #ffffff);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.builder-bank-item.is-added {
+  background: var(--surface-subtle, #f8fafc);
+  opacity: 0.72;
+}
+
+.diag-alert-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  border: 1px solid var(--line, #e2e8f0);
+}
+
+.diag-alert-row.is-ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.diag-alert-row.is-warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.diag-alert-row.is-bad {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.topic-chip-scroll {
+  max-height: 170px;
+  overflow-y: auto;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--surface-subtle, #f8fafc);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.topic-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 5px;
+}
+
+.topic-check-row:hover {
+  background: var(--surface, #ffffff);
+}
+
+/* 3. Smart Import Batch Toolbar & Duplicate Check */
+.import-batch-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
+}
+
+.import-dup-callout {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  font-size: 12.5px;
+  color: #92400e;
+}
+
+.import-paste-image-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--primary-soft, #eff6ff);
+  color: var(--primary, #2563eb);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 4. Single-row Filter Bar & Batch Dock for Bank / Exams */
+.teacher-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #e2e8f0);
+}
+
+.teacher-batch-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.meta-inline-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-3, #64748b);
+}
+
+@media (max-width: 900px) {
+  .builder-inspector-col {
+    position: static;
+    max-height: none;
+  }
+  .assign-drawer-panel {
+    max-width: 100%;
+  }
+}
