@@ -166,6 +166,8 @@ const ADDED_COLUMNS = [
   ['attempts', 'teacher_stamp', 'TEXT'],
   ['attempts', 'feedback_at', 'INTEGER'],
   ['assignments', 'module_id', 'INTEGER'],
+  ['users', 'target_score', 'REAL'],
+  ['attempts', 'mode', 'TEXT'],
 ];
 
 export function migrate(db) {

@@ -188,3 +188,51 @@ test('Câu đánh dấu khi làm bài được đưa vào Sổ tay lỗi sai, k�
   assert.equal(byQ[b.qid].tag, 'careless');
   assert.ok(!byQ[999999], 'không nhận câu ngoài bài làm');
 });
+
+test('Thi thử THPT: đúng cấu trúc 12/4/6, 90 phút, không xem đáp án giữa chừng, nộp xong có điểm', async () => {
+  const student = client();
+  assert.equal((await student('POST', '/api/login', { username: 'hs.an.nm', password: SAMPLE_PASSWORD })).status, 200);
+  const start = await student('POST', '/api/practice/start', { mode: 'mock' });
+  assert.equal(start.status, 200);
+  assert.equal(start.data.mode, 'mock');
+  const counts = { mcq: 0, tf: 0, short: 0 };
+  for (const it of start.data.items) counts[it.type]++;
+  assert.deepEqual(counts, { mcq: 12, tf: 4, short: 6 });
+  const mins = Math.round((start.data.deadlineAt - start.data.startedAt) / 60000);
+  assert.equal(mins, 90);
+  const peek = await student('POST', `/api/practice/${start.data.id}/check`, { qid: start.data.items[0].qid, response: 0 });
+  assert.equal(peek.status, 400);
+  const done = await student('POST', `/api/practice/${start.data.id}/finish`, { responses: {}, times: {} });
+  assert.equal(done.status, 200);
+  assert.ok(done.data.result && typeof done.data.result.score10 === 'number');
+});
+
+test('Mục tiêu điểm: lưu, kiểm tra giới hạn; dự báo chỉ dựa trên bài đã công bố điểm; có kế hoạch hôm nay', async () => {
+  const student = client();
+  assert.equal((await student('POST', '/api/login', { username: 'hs.an.nm', password: SAMPLE_PASSWORD })).status, 200);
+  const g0 = await student('GET', '/api/student/goal');
+  assert.equal(g0.status, 200);
+  assert.ok(Array.isArray(g0.data.plan) && g0.data.plan.length >= 1);
+  assert.equal(g0.data.week.length, 7);
+  if (g0.data.forecast) {
+    assert.ok(g0.data.forecast.low <= g0.data.forecast.score && g0.data.forecast.score <= g0.data.forecast.high);
+    assert.ok(g0.data.forecast.basis >= 2);
+  }
+  assert.equal((await student('PUT', '/api/student/goal', { target: 11 })).status, 400);
+  const g1 = await student('PUT', '/api/student/goal', { target: 8.1 });
+  assert.equal(g1.status, 200);
+  assert.equal(g1.data.target, 8);
+  const g2 = await student('GET', '/api/student/goal');
+  assert.equal(g2.data.target, 8);
+  for (const t of g2.data.gainTopics) assert.ok(t.gain > 0 && t.mastery < 0.75);
+});
+
+test('Dự báo điểm bỏ qua bài nộp trắng quá nửa', async () => {
+  const student = client();
+  assert.equal((await student('POST', '/api/login', { username: 'hs.chau.tb', password: SAMPLE_PASSWORD })).status, 200);
+  const before = await student('GET', '/api/student/goal');
+  const start = await student('POST', '/api/practice/start', { mode: 'mock' });
+  await student('POST', `/api/practice/${start.data.id}/finish`, { responses: {}, times: {} });
+  const after = await student('GET', '/api/student/goal');
+  assert.deepEqual(after.data.forecast, before.data.forecast);
+});

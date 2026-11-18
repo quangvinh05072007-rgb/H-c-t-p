@@ -1,6 +1,6 @@
 import { matchesSearch } from '../../../shared/search.mjs';
 import { useMemo, useState } from 'react';
-import { BookMarked, Clock, Grid2X2, List, Search, SlidersHorizontal } from 'lucide-react';
+import { BookMarked, Clock, Grid2X2, List, Search, SlidersHorizontal, Timer } from 'lucide-react';
 import { get, post } from '../../api';
 import { ErrorBox, fmtScore, go, Loading, scoreColor, topicName, useApp, useAsync } from '../../ui/kit';
 
@@ -121,6 +121,18 @@ export function PracticeHub() {
     }
   };
 
+  const [mockBusy, setMockBusy] = useState(false);
+  const startMock = async () => {
+    setMockBusy(true);
+    try {
+      const att = await post<any>('/api/practice/start', { mode: 'mock' });
+      go(`/thi/${att.id}`);
+    } catch (err: any) {
+      toast(err.message || 'Không thể tạo đề thi thử.');
+      setMockBusy(false);
+    }
+  };
+
   const resetFilters = () => {
     setSelectedSubject('all');
     setSelectedGrade('all');
@@ -188,10 +200,16 @@ export function PracticeHub() {
           <h1>Đề thi</h1>
           <p className="su-sub">{`${totalCount} đề · ${completedCount} đã làm`}</p>
         </div>
-        <button type="button" className="btn" onClick={() => go('/so-tay-loi-sai')}>
-          <BookMarked size={15} aria-hidden="true" />
-          Sổ tay lỗi sai{dueCount > 0 ? ` (${dueCount} cần ôn)` : ''}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="btn" onClick={() => go('/so-tay-loi-sai')}>
+            <BookMarked size={15} aria-hidden="true" />
+            Sổ tay lỗi sai{dueCount > 0 ? ` (${dueCount} cần ôn)` : ''}
+          </button>
+          <button type="button" className="btn primary" disabled={mockBusy} onClick={startMock} title="Đề 12 trắc nghiệm, 4 đúng/sai, 6 trả lời ngắn, 90 phút, chấm theo thang của Bộ">
+            <Timer size={15} aria-hidden="true" />
+            {mockBusy ? 'Đang ghép đề…' : 'Thi thử THPT · 90 phút'}
+          </button>
+        </div>
       </header>
 
       {loading ? (

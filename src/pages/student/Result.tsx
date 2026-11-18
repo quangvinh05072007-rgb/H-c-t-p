@@ -334,7 +334,7 @@ export function ResultPage({ attemptId }: { attemptId: number }) {
           </button>
           <h1>{data.title}</h1>
           <p className="su-sub">
-            {data.kind === 'practice' ? 'Bài tự luyện' : data.status === 'auto_submitted' ? 'Hết giờ, hệ thống tự nộp' : 'Bài kiểm tra'}
+            {data.mode === 'mock' ? 'Thi thử THPT, chấm theo thang của Bộ' : data.kind === 'practice' ? 'Bài tự luyện' : data.status === 'auto_submitted' ? 'Hết giờ, hệ thống tự nộp' : 'Bài kiểm tra'}
             {data.submittedAt ? ` · Nộp ${fmtDateTime(data.submittedAt)}` : ''}
           </p>
         </div>
@@ -407,7 +407,7 @@ export function ResultPage({ attemptId }: { attemptId: number }) {
               <div className="su-row-meta">Chưa đủ dữ liệu theo chuyên đề.</div>
             ) : (
               <div className="su-list">
-                {[...(r.topics ?? [])].sort((a: any, b: any) => a.ratio - b.ratio).map((t: any) => (
+                {[...(r.topics ?? [])].sort((a: any, b: any) => a.ratio - b.ratio).slice(0, 5).map((t: any) => (
                   <div key={t.topic} className="su-row" style={{ padding: '8px 0' }}>
                     <div className="su-row-main">
                       <div className="su-topic-foot">

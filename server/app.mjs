@@ -266,6 +266,7 @@ export function createApp(config = {}) {
     const view = {
       id: att.id,
       kind: att.kind,
+      mode: att.mode ?? null,
       title: att.title,
       status: att.status,
       startedAt: att.started_at,
@@ -3686,6 +3687,24 @@ export function createApp(config = {}) {
       }
       title = 'Luyện chuyên đề cần cải thiện';
     }
+    if (mode === 'mock') {
+      // Thi thử đúng cấu trúc đề tốt nghiệp: 12 trắc nghiệm, 4 đúng/sai, 6 trả lời ngắn, 90 phút, không xem đáp án giữa chừng.
+      const g = generateExam(pool, { ...OFFICIAL_BLUEPRINT, seed: `mock-${user.id}-${now()}` });
+      const need = OFFICIAL_BLUEPRINT.counts;
+      const got = { mcq: 0, tf: 0, short: 0 };
+      for (const it of g.items) got[it.type]++;
+      if (got.mcq < need.mcq || got.tf < need.tf || got.short < need.short) {
+        fail(400, `Ngân hàng chưa đủ câu đã duyệt để ghép đề thi thử (cần ${need.mcq} trắc nghiệm, ${need.tf} đúng/sai, ${need.short} trả lời ngắn). Báo giáo viên bổ sung.`);
+      }
+      const byId = Object.fromEntries(pool.map((q) => [q.id, q]));
+      const mockLayout = makeVariant(g.items.map((it) => ({ qid: it.qid, type: it.type, fixedOptions: imageOptions(byId[it.qid] ?? it) })), `mock-${user.id}-${now()}`);
+      const mr = db.run(
+        "INSERT INTO attempts (school_id, student_id, kind, title, layout_json, started_at, deadline_at, mode) VALUES (?,?,?,?,?,?,?,'mock')",
+        user.school_id, user.id, 'practice', 'Thi thử tốt nghiệp THPT (mô phỏng)', JSON.stringify(mockLayout), now(), now() + OFFICIAL_BLUEPRINT.durationMin * 60000,
+      );
+      audit(user, 'practice_start', 'mock: thi thử THPT', ip);
+      return attemptView(getAttempt(Number(mr.lastInsertRowid)));
+    }
     let picked = selectPractice({ pool, topics, mastery, history: hist, due, count, seed: `${user.id}-${now()}`, now: now() });
     if (mode === 'speed_drill') {
       const mcqs = pool.filter((q) => q.type === 'mcq');
@@ -3700,10 +3719,95 @@ export function createApp(config = {}) {
     audit(user, 'practice_start', `${mode}: ${topics.join(',')}`, ip);
     return attemptView(getAttempt(Number(r.lastInsertRowid)));
   });
+  // ---- MỤC TIÊU ĐIỂM, DỰ BÁO ĐIỂM & KẾ HOẠCH HÔM NAY (không dùng AI: thống kê trên bài đã chấm) ----
+  function goalPlan(user) {
+    const t = now();
+    const target = db.get('SELECT target_score FROM users WHERE id = ?', user.id)?.target_score ?? null;
+
+    // Dự báo: các bài đã nộp, đã công bố điểm, đủ dài (≥ 10 câu); bài gần đây nặng hơn.
+    const rows = db.all(
+      "SELECT id FROM attempts WHERE student_id = ? AND status != 'in_progress' AND score10 IS NOT NULL ORDER BY COALESCE(submitted_at, started_at) DESC LIMIT 12",
+      user.id,
+    );
+    const graded = [];
+    for (const { id } of rows) {
+      const att = getAttempt(id);
+      if (!att || !visibilityFor(att).scoreVisible) continue;
+      const n = Array.isArray(att.layout) ? att.layout.length : 0;
+      if (n < 10) continue;
+      // Bài bỏ trống quá nửa (nộp vội, bỏ dở) không phản ánh năng lực: không tính vào dự báo
+      const resp = att.responses ?? {};
+      const answered = att.layout.filter((it) => {
+        const v = resp[it.qid];
+        return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.every((x) => x === null || x === undefined));
+      }).length;
+      if (answered < n / 2) continue;
+      graded.push({ score: Number(att.score10), at: att.submitted_at ?? att.started_at, layout: att.layout });
+      if (graded.length >= 6) break;
+    }
+    let forecast = null;
+    if (graded.length >= 2) {
+      let ws = 0, s = 0;
+      graded.forEach((g, i) => { const w = Math.pow(0.8, i); ws += w; s += w * g.score; });
+      const mean = s / ws;
+      const sd = Math.sqrt(graded.reduce((acc, g) => acc + (g.score - mean) ** 2, 0) / graded.length);
+      const spread = Math.max(0.5, Math.min(1.5, sd));
+      const round = (x) => Math.round(Math.max(0, Math.min(10, x)) * 4) / 4;
+      forecast = { score: round(mean), low: round(mean - spread), high: round(mean + spread), basis: graded.length };
+    }
+
+    // Tỉ trọng chuyên đề trong đề: lấy từ các bài đã làm; chưa có thì chia đều các chuyên đề lớp 12.
+    const share = {};
+    let total = 0;
+    for (const g of graded) for (const it of g.layout) {
+      const q = db.get('SELECT topic FROM questions WHERE id = ?', it.qid);
+      if (q?.topic) { share[q.topic] = (share[q.topic] ?? 0) + 1; total++; }
+    }
+    if (!total) {
+      const g12 = TOPICS.filter((x) => x.grade === 12);
+      for (const x of g12) share[x.code] = 1;
+      total = g12.length;
+    }
+    const mastery = studentMastery(user.id);
+    const gainTopics = Object.values(mastery)
+      .filter((m) => m.value < 0.75 && share[m.topic])
+      .map((m) => {
+        const sh = share[m.topic] / total;
+        return { topic: m.topic, name: m.name, mastery: m.value, share: Math.round(sh * 1000) / 1000, gain: Math.round(sh * 10 * (0.85 - m.value) * 100) / 100 };
+      })
+      .filter((x) => x.gain > 0.05)
+      .sort((x, y) => y.gain - x.gain)
+      .slice(0, 3);
+
+    // Kế hoạch hôm nay: ôn câu đến hạn → luyện chuyên đề gỡ điểm → giữ chỉ tiêu câu mỗi ngày.
+    const dueCount = db.get('SELECT COUNT(*) n FROM review_items WHERE student_id = ? AND due_day <= ?', user.id, dayKey(t)).n;
+    const today = db.get('SELECT questions FROM activity WHERE student_id = ? AND day = ?', user.id, dayKey(t))?.questions ?? 0;
+    const dailyGoal = 10;
+    const week = [];
+    for (let i = 6; i >= 0; i--) {
+      const day = dayKey(t - i * 86400000);
+      week.push({ day, questions: db.get('SELECT questions FROM activity WHERE student_id = ? AND day = ?', user.id, day)?.questions ?? 0 });
+    }
+    const plan = [];
+    if (dueCount > 0) plan.push({ kind: 'review', label: `Ôn ${dueCount} câu sai đến hạn`, count: Math.min(10, dueCount) });
+    if (gainTopics[0]) plan.push({ kind: 'topic', label: `Luyện 8 câu: ${gainTopics[0].name}`, topic: gainTopics[0].topic, count: 8 });
+    plan.push({ kind: 'daily', label: `Làm đủ ${dailyGoal} câu hôm nay`, done: today >= dailyGoal, progress: Math.min(today, dailyGoal), goal: dailyGoal });
+
+    return { target, forecast, gainTopics, plan, week, dailyGoal };
+  }
+  route('GET', '/api/student/goal', ['student'], ({ user }) => goalPlan(user));
+  route('PUT', '/api/student/goal', ['student'], ({ user, body }) => {
+    const v = body?.target === null ? null : Number(body?.target);
+    if (v !== null && !(Number.isFinite(v) && v >= 1 && v <= 10)) fail(400, 'Mục tiêu điểm phải từ 1 đến 10.');
+    db.run('UPDATE users SET target_score = ? WHERE id = ?', v === null ? null : Math.round(v * 4) / 4, user.id);
+    return goalPlan(user);
+  });
+
   route('POST', '/api/practice/:id/check', ['student'], ({ user, params, body }) => {
     const att = ownAttempt(user, params.id);
     if (att.kind !== 'practice') fail(400, 'Chỉ bài luyện tập mới xem đáp án từng câu.');
     if (att.status !== 'in_progress') fail(400, 'Bài luyện đã kết thúc.');
+    if (att.mode === 'mock') fail(400, 'Bài thi thử không xem đáp án giữa chừng. Nộp bài để xem kết quả.');
     const qid = Number(body.qid);
     const it = att.layout.find((x) => x.qid === qid);
     if (!it) fail(400, 'Câu không thuộc bài này.');

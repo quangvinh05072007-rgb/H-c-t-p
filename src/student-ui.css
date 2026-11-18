@@ -1144,3 +1144,73 @@
 .legend-box.done {
   background: var(--primary);
 }
+
+/* ---- Mục tiêu điểm: thang 0–10, khoảng dự báo và vạch mục tiêu ---- */
+.su-scale {
+  position: relative;
+  height: 10px;
+  margin: 10px 0 8px;
+  border-radius: 99px;
+  background: var(--surface-3);
+}
+.su-scale-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 99px;
+  background: var(--primary-soft);
+}
+.su-scale-dot {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--surface);
+  transform: translate(-50%, -50%);
+}
+.su-scale-target {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--warn);
+  transform: translateX(-50%);
+}
+
+/* ---- 7 ngày gần nhất ---- */
+.su-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-subtle);
+}
+.su-week-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.su-week-day small {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.su-week-bar {
+  width: 100%;
+  max-width: 26px;
+  height: 44px;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 6px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.su-week-bar span {
+  display: block;
+  width: 100%;
+  border-radius: 6px;
+}

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { BookOpen, CalendarClock, CircleCheck, ClipboardList, Flame, PenLine, Sparkles, Timer, Zap } from 'lucide-react';
-import { get, post } from '../../api';
+import { BookOpen, CalendarClock, CircleCheck, ClipboardList, Flame, ListChecks, PenLine, RotateCcw, Target, Timer, Zap } from 'lucide-react';
+import { get, post, put } from '../../api';
 import { ErrorBox, fmtDateTime, fmtScore, go, Loading, scoreColor, useApp, useAsync } from '../../ui/kit';
 
 type Tone = 'bad' | 'warn' | 'info' | '';
@@ -62,18 +62,32 @@ function StudyDeskIllustration() {
   );
 }
 
+type GoalPlan = {
+  target: number | null;
+  forecast: { score: number; low: number; high: number; basis: number } | null;
+  gainTopics: { topic: string; name: string; mastery: number; gain: number }[];
+  plan: { kind: 'review' | 'topic' | 'daily'; label: string; topic?: string; count?: number; done?: boolean; progress?: number; goal?: number }[];
+  week: { day: string; questions: number }[];
+  dailyGoal: number;
+};
+
+const TARGET_OPTIONS = [5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
+const WEEKDAY = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+
 export function StudentHome() {
   const { user, toast } = useApp();
   const { data, error, loading, reload } = useAsync(async () => {
-    const [home, mistakes] = await Promise.all([
+    const [home, mistakes, goal] = await Promise.all([
       get<any>('/api/student/home'),
       get<any>('/api/student/mistakes').catch(() => ({ mistakes: [], totalMistakes: 0, dueCount: 0, notedCount: 0, topWeakTopics: [] })),
+      get<GoalPlan>('/api/student/goal').catch(() => null),
     ]);
-    return { home, mistakes };
+    return { home, mistakes, goal };
   }, []);
 
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<'todo' | 'done'>('todo');
+  const [goalOverride, setGoalOverride] = useState<GoalPlan | null>(null);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -123,6 +137,21 @@ export function StudentHome() {
     run(() => post(`/api/attempts/${attemptId}/retake`), 'Không thể tạo đề làm lại.');
   const startTopicPractice = (topic: string, name?: string) =>
     run(() => post('/api/practice/start', { mode: 'topic', topics: [topic], count: 8 }), `Không thể tạo bài luyện chuyên đề ${name || topic}.`);
+
+  const startMock = () =>
+    run(() => post('/api/practice/start', { mode: 'mock' }), 'Không thể tạo đề thi thử.');
+  const startReview = (count = 10) =>
+    run(() => post('/api/practice/start', { mode: 'review', count }), 'Không thể tạo bài ôn câu đến hạn.');
+  const goal: GoalPlan | null = goalOverride ?? data.goal ?? null;
+  const saveTarget = async (value: string) => {
+    try {
+      const next = await put<GoalPlan>('/api/student/goal', { target: value === '' ? null : Number(value) });
+      setGoalOverride(next);
+      toast(value === '' ? 'Đã bỏ mục tiêu điểm.' : `Đã đặt mục tiêu ${fmtScore(Number(value))} điểm.`);
+    } catch (e: any) {
+      toast(e.message || 'Không lưu được mục tiêu.');
+    }
+  };
 
   const todoCount = open.length + (practiceInProgress ? 1 : 0);
   const feedback = home.teacherFeedback;
@@ -221,7 +250,8 @@ export function StudentHome() {
       </section>
 
       <div className="su-split">
-        {/* Cột chính: một danh sách việc duy nhất */}
+        {/* Cột chính: việc cần làm + kế hoạch hôm nay */}
+        <div className="su-col">
         <section className="su-card" aria-label="Việc cần làm">
           <div className="su-card-head">
             <h2>Việc cần làm</h2>
@@ -317,6 +347,48 @@ export function StudentHome() {
           )}
         </section>
 
+        {goal && (
+          <section className="su-card" aria-label="Kế hoạch hôm nay">
+            <div className="su-card-head">
+              <h2>Hôm nay</h2>
+              <span className="su-row-meta" style={{ margin: 0 }}>Kế hoạch tự xếp theo bài ôn và chuyên đề yếu</span>
+            </div>
+            <div className="su-list">
+              {goal.plan.map((p, i) => (
+                <div key={i} className="su-row" style={{ padding: '9px 0' }}>
+                  <div className={`su-row-icon ${p.done ? 'is-good' : p.kind === 'review' ? 'is-warn' : ''}`}>
+                    {p.done ? <CircleCheck size={17} aria-hidden="true" /> : p.kind === 'review' ? <RotateCcw size={17} aria-hidden="true" /> : p.kind === 'topic' ? <Target size={17} aria-hidden="true" /> : <ListChecks size={17} aria-hidden="true" />}
+                  </div>
+                  <div className="su-row-main">
+                    <div className="su-row-title" style={{ fontSize: 13.5, textDecoration: p.done ? 'line-through' : undefined, color: p.done ? 'var(--ink-3)' : undefined }}>{p.label}</div>
+                    {p.kind === 'daily' && (
+                      <div className="su-bar" style={{ marginTop: 6, maxWidth: 220 }}>
+                        <span style={{ width: `${Math.round(((p.progress ?? 0) / (p.goal || 10)) * 100)}%` }} />
+                      </div>
+                    )}
+                  </div>
+                  {p.kind === 'review' && <button type="button" className="btn sm" disabled={busy} onClick={() => startReview(p.count)}>Ôn ngay</button>}
+                  {p.kind === 'topic' && p.topic && <button type="button" className="btn sm" disabled={busy} onClick={() => startTopicPractice(p.topic!, p.label)}>Luyện</button>}
+                  {p.kind === 'daily' && !p.done && <button type="button" className="btn sm" onClick={() => go('/luyen-vo-han')}>Làm tiếp</button>}
+                </div>
+              ))}
+            </div>
+            <div className="su-week" aria-label="Số câu đã làm 7 ngày qua">
+              {goal.week.map((d) => {
+                const h = Math.min(1, d.questions / (goal.dailyGoal || 10));
+                const wd = WEEKDAY[new Date(`${d.day}T12:00:00+07:00`).getDay()];
+                return (
+                  <div key={d.day} className="su-week-day" title={`${d.day}: ${d.questions} câu`}>
+                    <div className="su-week-bar"><span style={{ height: `${Math.max(h * 100, d.questions ? 8 : 0)}%`, background: h >= 1 ? 'var(--good)' : 'var(--primary)' }} /></div>
+                    <small>{wd}</small>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+        </div>
+
         {/* Cột phụ */}
         <div className="su-col">
           <section className="su-card" aria-label="Kết quả gần nhất">
@@ -371,25 +443,66 @@ export function StudentHome() {
             )}
           </section>
 
-          {rec && (
-            <section className="su-card" aria-label="Nên củng cố">
-              <div className="su-card-head">
-                <h2><Sparkles size={15} aria-hidden="true" style={{ verticalAlign: -2, color: 'var(--primary)' }} /> Nên củng cố</h2>
-                <a className="su-link" href="#/tu-hoc">Tự học</a>
-              </div>
-              <div className="su-row-title">{rec.name}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' }}>
-                <div className="su-bar" style={{ flex: 1 }}>
-                  <span style={{ width: `${Math.round((rec.mastery ?? 0) * 100)}%`, background: 'var(--warn)' }} />
+          <section className="su-card" aria-label="Mục tiêu điểm">
+            <div className="su-card-head">
+              <h2><Target size={15} aria-hidden="true" style={{ verticalAlign: -2, color: 'var(--primary)' }} /> Mục tiêu điểm</h2>
+              <select className="su-select" value={goal?.target ?? ''} onChange={(e) => saveTarget(e.target.value)} aria-label="Chọn mục tiêu điểm">
+                <option value="">Chưa đặt</option>
+                {TARGET_OPTIONS.map((v) => (
+                  <option key={v} value={v}>{fmtScore(v)} điểm</option>
+                ))}
+              </select>
+            </div>
+            {goal?.forecast ? (
+              <>
+                <div className="su-row-meta" style={{ marginTop: 0 }}>
+                  Dự báo hiện tại <b style={{ color: scoreColor(goal.forecast.score), fontSize: 15 }}>{fmtScore(goal.forecast.score)}</b>
+                  <span>(khoảng {fmtScore(goal.forecast.low)}–{fmtScore(goal.forecast.high)})</span>
                 </div>
-                <span className="su-row-meta" style={{ margin: 0 }}>{Math.round((rec.mastery ?? 0) * 100)}%</span>
+                <div className="su-scale" aria-hidden="true">
+                  <span className="su-scale-band" style={{ left: `${goal.forecast.low * 10}%`, width: `${(goal.forecast.high - goal.forecast.low) * 10}%` }} />
+                  <span className="su-scale-dot" style={{ left: `${goal.forecast.score * 10}%` }} />
+                  {goal.target !== null && <span className="su-scale-target" style={{ left: `${goal.target * 10}%` }} />}
+                </div>
+                <div className="su-row-meta">
+                  {goal.target === null
+                    ? `Ước tính từ ${goal.forecast.basis} bài đã chấm gần nhất. Đặt mục tiêu để biết còn thiếu bao nhiêu.`
+                    : goal.forecast.score >= goal.target
+                      ? `Đang đạt mục tiêu ${fmtScore(goal.target)}. Giữ phong độ!`
+                      : `Còn thiếu khoảng ${fmtScore(Math.round((goal.target - goal.forecast.score) * 4) / 4)} điểm so với mục tiêu ${fmtScore(goal.target)}.`}
+                </div>
+              </>
+            ) : (
+              <div className="su-row-meta" style={{ marginTop: 0 }}>Làm ít nhất 2 bài từ 10 câu trở lên (đã có điểm) để có dự báo điểm.</div>
+            )}
+            {(goal?.gainTopics?.length ?? 0) > 0 ? (
+              <>
+                <div className="su-row-meta" style={{ marginTop: 12, fontWeight: 700, color: 'var(--ink-2)' }}>Gỡ điểm nhanh nhất</div>
+                <div className="su-list">
+                  {goal!.gainTopics.map((t) => (
+                    <div key={t.topic} className="su-row" style={{ padding: '7px 0' }}>
+                      <div className="su-row-main">
+                        <div className="su-row-title" style={{ fontSize: 13.5 }}>{t.name}</div>
+                        <div className="su-row-meta">Thành thạo {Math.round(t.mastery * 100)}% · có thể thêm khoảng {fmtScore(Math.max(0.25, Math.round(t.gain * 4) / 4))} điểm</div>
+                      </div>
+                      <button type="button" className="btn sm" disabled={busy} onClick={() => startTopicPractice(t.topic, t.name)}>Luyện</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : rec ? (
+              <div className="su-row" style={{ padding: '10px 0 0' }}>
+                <div className="su-row-main">
+                  <div className="su-row-title" style={{ fontSize: 13.5 }}>Nên củng cố: {rec.name}</div>
+                  <div className="su-row-meta">Thành thạo {Math.round((rec.mastery ?? 0) * 100)}%</div>
+                </div>
+                <button type="button" className="btn sm" disabled={busy} onClick={() => startTopicPractice(rec.topic, rec.name)}>Luyện</button>
               </div>
-              {(rec.tip || rec.reason) && <div className="su-row-meta" style={{ marginBottom: 10 }}>{rec.tip || rec.reason}</div>}
-              <button type="button" className="btn sm primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy} onClick={() => startTopicPractice(rec.topic, rec.name)}>
-                Luyện 8 câu chuyên đề này
-              </button>
-            </section>
-          )}
+            ) : null}
+            <button type="button" className="btn primary" style={{ width: '100%', justifyContent: 'center', marginTop: 12 }} disabled={busy} onClick={startMock}>
+              <Timer size={15} aria-hidden="true" /> Thi thử THPT · 90 phút
+            </button>
+          </section>
 
 
         </div>

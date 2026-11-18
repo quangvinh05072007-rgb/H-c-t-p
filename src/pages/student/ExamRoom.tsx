@@ -20,6 +20,7 @@ type Attempt = {
   times: Record<string, number>;
   checked: Record<string, any>;
   items: Item[];
+  mode?: string | null;
 };
 
 function clientId() {
@@ -335,7 +336,7 @@ export function ExamRoom({ attemptId }: { attemptId: number }) {
     if (!att) return;
     const currentItem = att.items[cur];
     if (!currentItem) return;
-    const isPracticeMode = att.kind === 'practice';
+    const isPracticeMode = att.kind === 'practice' && att.mode !== 'mock';
     const hasReview = Boolean(checks[currentItem.qid]);
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -376,7 +377,9 @@ export function ExamRoom({ attemptId }: { attemptId: number }) {
   if (!att) return <Loading text="Đang mở bài…" />;
   const it = att.items[cur];
   const answered = att.items.filter((x) => isAnswered(x.type, responses[x.qid])).length;
-  const isPractice = att.kind === 'practice';
+  // Thi thử THPT là bài luyện cá nhân nhưng làm như thi thật: tính giờ, không xem đáp án giữa chừng
+  const isMock = att.mode === 'mock';
+  const isPractice = att.kind === 'practice' && !isMock;
   const checkInfo = checks[it.qid];
   const review: Review | null = checkInfo ? { ...checkInfo } : null;
   const unanswered = att.items.length - answered;
@@ -401,7 +404,7 @@ export function ExamRoom({ attemptId }: { attemptId: number }) {
           <div className="exam-info-block" style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
               <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: 'var(--primary-soft)', color: 'var(--primary)', textTransform: 'uppercase', flexShrink: 0 }}>
-                {isPractice ? 'Luyện tập' : 'Chính thức'}
+                {isMock ? 'Thi thử' : isPractice ? 'Luyện tập' : 'Chính thức'}
               </span>
               <h1 className="exam-main-title" title={att.title} style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
                 {att.title}
