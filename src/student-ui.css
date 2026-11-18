@@ -1074,3 +1074,50 @@
   background: var(--primary-subtle);
   border-color: var(--primary-soft);
 }
+
+/* ---- Trang chuyên đề: một trang cuộn ---- */
+.su-topic-body {
+  max-width: 860px;
+}
+.su-topic-body .ss-content-stage {
+  padding: 4px 0 0;
+}
+.su-topic-body .ss-stage-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.su-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-subtle);
+}
+.su-topic-body .ss-stage-body > .su-section-head:first-child {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+.su-section-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink);
+}
+/* Công thức dài cuộn ngang, không còn thanh cuộn dọc thừa trong từng thẻ */
+.ss-formula-expression {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.ss-formula-expression .katex-display,
+.ss-formula-expression .katex {
+  overflow: visible;
+}
+.ss-lesson-cta-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}

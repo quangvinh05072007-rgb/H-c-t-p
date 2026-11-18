@@ -368,108 +368,53 @@ export function TopicStudyWorkspace({
             </div>
           </div>
 
-          {isBankTopic ? (
-            <button
-              type="button"
-              className="ss-btn ss-btn-primary"
-              disabled={busy}
-              onClick={() => onStartPractice([topic.code], 10)}
-              style={{ width: '100%' }}
-            >
-              <Play size={16} aria-hidden="true" />
-              <span>{busy ? 'Đang tạo đề luyện…' : 'Luyện ngay 10 câu'}</span>
+          <div className="su-pills" role="group" aria-label="Số câu luyện" style={{ flexWrap: 'nowrap' }}>
+            {[5, 10, 15, 20].map((n) => (
+              <button key={n} type="button" className={`su-pill ${customCount === n ? 'on' : ''}`} onClick={() => setCustomCount(n)} style={{ flex: 1 }}>
+                {n} câu
+              </button>
+            ))}
+          </div>
+          <button type="button" className="btn primary" disabled={busy} onClick={() => onStartPractice([topic.code], customCount)} style={{ width: '100%', justifyContent: 'center' }}>
+            <Play size={15} aria-hidden="true" />
+            {busy ? 'Đang tạo đề…' : `Luyện ${customCount} câu chuyên đề này`}
+          </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="su-link" onClick={() => onTogglePick(topic.code)}>
+              {isPicked ? 'Đã thêm vào luyện kết hợp' : '+ Luyện kết hợp nhiều chủ đề'}
             </button>
-          ) : (
-            <button
-              type="button"
-              className="ss-btn ss-btn-primary"
-              onClick={() => go('/luyen-tap')}
-              style={{ width: '100%' }}
-            >
-              <span>Mở Kho Đề Thi {subjectName}</span>
-              <ArrowRight size={16} aria-hidden="true" />
-            </button>
-          )}
+            {pickedCount > 0 && onStartPickedPractice && (
+              <button type="button" className="su-link" disabled={busy} onClick={() => onStartPickedPractice(customCount)}>
+                Luyện {pickedCount} chủ đề đã chọn
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
       {/* 3. Khung nội dung học tập 2 cột (66% Chính / 34% Điều khiển) */}
-      <div className="ss-workspace-grid">
+      <div className="su-topic-body">
         {/* CỘT CHÍNH: Nội dung học tập */}
         <section className="ss-content-stage" aria-label="Nội dung bài học">
-          <div className="ss-stage-tabs-header">
-            <div className="ss-stage-tablist" role="tablist" aria-label="Mục nội dung bài học">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={stageTab === 'theory'}
-                className={`ss-stage-tab ${stageTab === 'theory' ? 'is-active' : ''}`}
-                onClick={() => handleTabChange('theory')}
-              >
-                <BookOpen size={15} aria-hidden="true" />
-                <span>Kiến thức &amp; công thức</span>
-              </button>
-
-              {hasExamples && (
+          <div className="ss-stage-body">
+            <div className="su-section-head">
+              <h2>Kiến thức &amp; công thức</h2>
+              {curriculum?.formulas?.length ? (
                 <button
                   type="button"
-                  role="tab"
-                  aria-selected={stageTab === 'examples'}
-                  className={`ss-stage-tab ${stageTab === 'examples' ? 'is-active' : ''}`}
-                  onClick={() => handleTabChange('examples')}
+                  className={`btn sm ${recallMode ? 'primary' : ''}`}
+                  onClick={() => {
+                    setRecallMode((v) => !v);
+                    setRevealedFormulas({});
+                  }}
+                  aria-pressed={recallMode}
                 >
-                  <FileText size={15} aria-hidden="true" />
-                  <span>Ví dụ minh họa</span>
+                  {recallMode ? <Eye size={14} aria-hidden="true" /> : <EyeOff size={14} aria-hidden="true" />}
+                  {recallMode ? 'Hiện công thức' : 'Tự nhẩm'}
                 </button>
-              )}
-
-              <button
-                type="button"
-                role="tab"
-                aria-selected={stageTab === 'quick_practice'}
-                className={`ss-stage-tab ${stageTab === 'quick_practice' ? 'is-active' : ''}`}
-                onClick={() => handleTabChange('quick_practice')}
-              >
-                <Zap size={15} aria-hidden="true" />
-                <span>Thử nhanh</span>
-              </button>
-
-              <button
-                type="button"
-                role="tab"
-                aria-selected={stageTab === 'tips'}
-                className={`ss-stage-tab ${stageTab === 'tips' ? 'is-active' : ''}`}
-                onClick={() => handleTabChange('tips')}
-              >
-                <ShieldAlert size={15} aria-hidden="true" />
-                <span>Bẫy sai thường gặp</span>
-              </button>
+              ) : null}
             </div>
-
-            {stageTab === 'theory' && curriculum?.formulas?.length ? (
-              <button
-                type="button"
-                className={`ss-btn ss-btn-sm ${recallMode ? 'ss-btn-accent' : ''}`}
-                onClick={() => {
-                  setRecallMode((v) => !v);
-                  setRevealedFormulas({});
-                }}
-                aria-pressed={recallMode}
-              >
-                {recallMode ? <Eye size={14} aria-hidden="true" /> : <EyeOff size={14} aria-hidden="true" />}
-                <span>{recallMode ? 'Hiện tất cả công thức' : 'Tự nhẩm công thức'}</span>
-              </button>
-            ) : null}
-
-            {stageTab === 'quick_practice' && sessionStats.tried > 0 && (
-              <span className="tabular-nums" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ss-muted)' }}>
-                Phiên này: Đúng {sessionStats.correct}/{sessionStats.tried} câu
-              </span>
-            )}
-          </div>
-
-          <div className="ss-stage-body">
-            {stageTab === 'theory' && (
+            {true && (
               <div>
                 {curriculum?.formulas?.length ? (
                   <div className="ss-formula-list">
@@ -597,7 +542,8 @@ export function TopicStudyWorkspace({
               </div>
             )}
 
-            {stageTab === 'examples' && hasExamples && (
+            {hasExamples && <div className="su-section-head"><h2>Ví dụ minh họa</h2></div>}
+            {hasExamples && (
               <div className="ss-formula-list">
                 {curriculum!.examples!.map((ex, i) => (
                   <div key={i} className="ss-formula-card">
@@ -617,7 +563,56 @@ export function TopicStudyWorkspace({
               </div>
             )}
 
-            {stageTab === 'quick_practice' && (
+            <div className="su-section-head"><h2>Mẹo &amp; bẫy sai thường gặp</h2></div>
+            {true && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {curriculum?.keyExamTips && (
+                  <div className="ss-callout-box">
+                    <div className="ss-callout-title">
+                      <BookOpen size={16} color="var(--ss-accent)" aria-hidden="true" />
+                      <span>Kinh nghiệm giải nhanh &amp; điều kiện cần chú ý</span>
+                    </div>
+                    <div className="ss-formula-expression" style={{ fontSize: 15 }}>
+                      <MathText text={curriculum.keyExamTips} />
+                    </div>
+                  </div>
+                )}
+
+                {curriculum?.commonTraps && curriculum.commonTraps.length > 0 && (
+                  <div className="ss-formula-list">
+                    <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--ss-ink)' }}>
+                      Bẫy sai thường gặp cần tránh
+                    </div>
+                    {curriculum.commonTraps.map((trap, idx) => (
+                      <div key={idx} className="ss-callout-box is-warn" style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                        <AlertTriangle size={18} color="var(--ss-warn)" style={{ marginTop: 3, flexShrink: 0 }} aria-hidden="true" />
+                        <div className="ss-formula-expression" style={{ fontSize: 15 }}>
+                          <MathText text={trap} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div
+                  className="ss-callout-box"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>Ôn lại các câu bạn từng làm sai</div>
+                    <div style={{ fontSize: 13.5, color: 'var(--ss-muted)', marginTop: 2 }}>
+                      Hệ thống tự lưu các câu sai vào Sổ tay lỗi sai để nhắc ôn đúng thời điểm.
+                    </div>
+                  </div>
+                  <button type="button" className="ss-btn ss-btn-sm" onClick={() => go('/so-tay-loi-sai')}>
+                    <span>Mở Sổ tay lỗi sai</span>
+                    <ArrowRight size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="su-section-head"><h2>Thử nhanh từng câu</h2>{sessionStats.tried > 0 && <span className="su-row-meta" style={{ margin: 0 }}>Đúng {sessionStats.correct}/{sessionStats.tried} câu</span>}</div>
+            {true && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {!isBankTopic ? (
                   <div className="ss-callout-box">
@@ -698,210 +693,20 @@ export function TopicStudyWorkspace({
                       )}
                     </div>
                   </>
-                ) : null}
+                ) : (
+                  <div className="su-row" style={{ padding: 0 }}>
+                    <div className="su-row-main su-row-meta" style={{ margin: 0 }}>Làm thử một câu của chuyên đề này, chấm ngay, không tính vào bài kiểm tra.</div>
+                    <button type="button" className="btn sm primary" onClick={() => loadQuickQuestion(seenQids)}>
+                      <Zap size={14} aria-hidden="true" /> Lấy một câu
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
-            {stageTab === 'tips' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {curriculum?.keyExamTips && (
-                  <div className="ss-callout-box">
-                    <div className="ss-callout-title">
-                      <BookOpen size={16} color="var(--ss-accent)" aria-hidden="true" />
-                      <span>Kinh nghiệm giải nhanh &amp; điều kiện cần chú ý</span>
-                    </div>
-                    <div className="ss-formula-expression" style={{ fontSize: 15 }}>
-                      <MathText text={curriculum.keyExamTips} />
-                    </div>
-                  </div>
-                )}
-
-                {curriculum?.commonTraps && curriculum.commonTraps.length > 0 && (
-                  <div className="ss-formula-list">
-                    <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--ss-ink)' }}>
-                      Bẫy sai thường gặp cần tránh
-                    </div>
-                    {curriculum.commonTraps.map((trap, idx) => (
-                      <div key={idx} className="ss-callout-box is-warn" style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                        <AlertTriangle size={18} color="var(--ss-warn)" style={{ marginTop: 3, flexShrink: 0 }} aria-hidden="true" />
-                        <div className="ss-formula-expression" style={{ fontSize: 15 }}>
-                          <MathText text={trap} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div
-                  className="ss-callout-box"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 15 }}>Ôn lại các câu bạn từng làm sai</div>
-                    <div style={{ fontSize: 13.5, color: 'var(--ss-muted)', marginTop: 2 }}>
-                      Hệ thống tự lưu các câu sai vào Sổ tay lỗi sai để nhắc ôn đúng thời điểm.
-                    </div>
-                  </div>
-                  <button type="button" className="ss-btn ss-btn-sm" onClick={() => go('/so-tay-loi-sai')}>
-                    <span>Mở Sổ tay lỗi sai</span>
-                    <ArrowRight size={14} aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </section>
 
-        {/* CỘT PHỤ: Bảng điều khiển luyện tập bên phải (~34%) */}
-        <aside className="ss-practice-deck" aria-label="Bảng điều khiển luyện tập">
-          <div className="ss-deck-card">
-            <div>
-              <h2 className="ss-deck-section-title">Luyện tập chuyên đề</h2>
-              <p className="ss-deck-sub">
-                {isBankTopic
-                  ? 'Chọn nhanh độ dài bài luyện hoặc tùy chỉnh số lượng câu hỏi cho chuyên đề này.'
-                  : `Chuyên đề thuộc môn ${subjectName}. Mở Kho Đề Thi để làm các đề khảo sát có chấm điểm.`}
-              </p>
-            </div>
-
-            {isBankTopic ? (
-              <>
-                <div className="ss-preset-list">
-                  <button
-                    type="button"
-                    className="ss-preset-btn"
-                    disabled={busy}
-                    onClick={() => onStartPractice([topic.code], 5)}
-                  >
-                    <div>
-                      <div className="ss-preset-name">Khởi động nhanh</div>
-                      <div className="ss-preset-meta">5 câu cốt lõi · ~8 phút</div>
-                    </div>
-                    <ArrowRight size={16} color="var(--ss-muted)" aria-hidden="true" />
-                  </button>
-
-                  <button
-                    type="button"
-                    className="ss-preset-btn is-recommended"
-                    disabled={busy}
-                    onClick={() => onStartPractice([topic.code], 10)}
-                  >
-                    <div>
-                      <div className="ss-preset-name">Luyện tập tiêu chuẩn</div>
-                      <div className="ss-preset-meta">10 câu trọng tâm · ~15 phút</div>
-                    </div>
-                    <ArrowRight size={16} color="var(--ss-primary)" aria-hidden="true" />
-                  </button>
-
-                  <button
-                    type="button"
-                    className="ss-preset-btn"
-                    disabled={busy}
-                    onClick={() => onStartPractice([topic.code], 15)}
-                  >
-                    <div>
-                      <div className="ss-preset-name">Vận dụng nâng cao</div>
-                      <div className="ss-preset-meta">15 câu phân hóa · ~25 phút</div>
-                    </div>
-                    <ArrowRight size={16} color="var(--ss-muted)" aria-hidden="true" />
-                  </button>
-                </div>
-
-                <div className="ss-deck-divider">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 700 }}>Tùy chỉnh số lượng câu</span>
-                    <strong className="tabular-nums" style={{ fontSize: 13.5, color: 'var(--ss-accent)' }}>
-                      {customCount} câu
-                    </strong>
-                  </div>
-
-                  <div className="ss-count-segmented" style={{ width: '100%', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
-                    {[5, 10, 15, 20].map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        className={`ss-count-btn tabular-nums ${customCount === n ? 'is-active' : ''}`}
-                        onClick={() => setCustomCount(n)}
-                      >
-                        {n} câu
-                      </button>
-                    ))}
-                  </div>
-
-                  <button
-                    type="button"
-                    className="ss-btn ss-btn-primary"
-                    disabled={busy}
-                    onClick={() => onStartPractice([topic.code], customCount)}
-                    style={{ width: '100%' }}
-                  >
-                    <Play size={15} aria-hidden="true" />
-                    <span>{busy ? 'Đang tạo đề…' : `Bắt đầu luyện ${customCount} câu`}</span>
-                  </button>
-                </div>
-
-                <div className="ss-deck-divider">
-                  <button
-                    type="button"
-                    className={`ss-btn ss-btn-sm ${isPicked ? 'ss-btn-accent' : ''}`}
-                    onClick={() => onTogglePick(topic.code)}
-                    style={{ width: '100%' }}
-                  >
-                    {isPicked ? <Check size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
-                    <span>
-                      {isPicked ? 'Đã thêm vào luyện kết hợp' : 'Luyện kết hợp nhiều chủ đề'}
-                    </span>
-                  </button>
-
-                  {pickedCount > 0 && onStartPickedPractice && (
-                    <button
-                      type="button"
-                      className="ss-btn ss-btn-sm"
-                      disabled={busy}
-                      onClick={() => onStartPickedPractice(customCount)}
-                      style={{ width: '100%' }}
-                    >
-                      <Layers size={15} aria-hidden="true" />
-                      <span className="tabular-nums">
-                        Luyện {pickedCount} chủ đề đã chọn ({customCount} câu)
-                      </span>
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    className="ss-btn ss-btn-sm ss-btn-ghost"
-                    onClick={() => go('/so-tay-loi-sai')}
-                    style={{ width: '100%' }}
-                  >
-                    <span>Xem lỗi sai</span>
-                    <ArrowRight size={14} aria-hidden="true" />
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <button
-                  type="button"
-                  className="ss-btn ss-btn-primary"
-                  onClick={() => go('/luyen-tap')}
-                  style={{ width: '100%' }}
-                >
-                  <span>Vào Kho Đề Thi {subjectName}</span>
-                  <ArrowRight size={15} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className="ss-btn ss-btn-sm"
-                  onClick={() => handleTabChange('theory')}
-                  style={{ width: '100%' }}
-                >
-                  Ôn công thức trọng tâm
-                </button>
-              </div>
-            )}
-          </div>
-        </aside>
       </div>
 
       {/* 4. Thanh điều hướng bài học cuối trang */}
