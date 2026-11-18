@@ -6,6 +6,8 @@ export type OmrModalProps = {
   exam: any;
   onClose: () => void;
   onGraded?: (res: any) => void;
+  /** Có thì sau khi chấm cho chọn học sinh và lưu điểm vào bảng điểm của bài giao này. */
+  record?: { assignmentId: number; students: { id: number; name: string }[] };
 };
 
 type BatchSheetItem = {
@@ -23,7 +25,11 @@ type BatchSheetItem = {
   warningsCount: number;
 };
 
-export function OmrModal({ exam, onClose, onGraded }: OmrModalProps) {
+export function OmrModal({ exam, onClose, onGraded, record }: OmrModalProps) {
+  const [recordStudent, setRecordStudent] = useState<string>('');
+  const [recording, setRecording] = useState(false);
+  const [recordMsg, setRecordMsg] = useState<string | null>(null);
+  const [recordedIds, setRecordedIds] = useState<number[]>([]);
   const [mode, setMode] = useState<'single' | 'batch'>('single');
   const [file, setFile] = useState<File | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -632,6 +638,40 @@ export function OmrModal({ exam, onClose, onGraded }: OmrModalProps) {
                           <span>Phần II: <b>{gradeResult.grade?.byPart?.II?.points ?? 0}/{gradeResult.grade?.byPart?.II?.max ?? 4}</b></span>
                           <span>Phần III: <b>{gradeResult.grade?.byPart?.III?.points ?? 0}/{gradeResult.grade?.byPart?.III?.max ?? 3}</b></span>
                         </div>
+                        {record && (
+                          <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <select className="input sm" style={{ width: 'auto', minWidth: 200 }} value={recordStudent} onChange={(e) => { setRecordStudent(e.target.value); setRecordMsg(null); }} aria-label="Học sinh của phiếu này">
+                              <option value="">Chọn học sinh của phiếu…</option>
+                              {record.students.map((st) => (
+                                <option key={st.id} value={st.id} disabled={recordedIds.includes(st.id)}>{st.name}{recordedIds.includes(st.id) ? ' (đã lưu)' : ''}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="btn primary sm"
+                              disabled={!recordStudent || recording || !(variantCode || gradeResult.variantCode)}
+                              onClick={async () => {
+                                setRecording(true);
+                                setRecordMsg(null);
+                                try {
+                                  const r = await post<any>('/api/omr/record', { assignmentId: record.assignmentId, studentId: Number(recordStudent), variantCode: variantCode || gradeResult.variantCode, answers: { partI, partII, partIII } });
+                                  setRecordedIds((prev) => [...prev, Number(recordStudent)]);
+                                  setRecordMsg(`Đã lưu ${String(r.score10).replace('.', ',')} điểm cho ${r.student} vào bảng điểm.`);
+                                  setRecordStudent('');
+                                  onGraded?.(r);
+                                } catch (e: any) {
+                                  setRecordMsg(e.message || 'Không lưu được điểm.');
+                                } finally {
+                                  setRecording(false);
+                                }
+                              }}
+                            >
+                              {recording ? 'Đang lưu…' : 'Lưu vào bảng điểm'}
+                            </button>
+                            {!(variantCode || gradeResult.variantCode) && <span className="tiny muted">Cần mã đề trên phiếu để lưu.</span>}
+                            {recordMsg && <span className="tiny" style={{ color: 'var(--ink-2)' }}>{recordMsg}</span>}
+                          </div>
+                        )}
                       </div>
                     )}
 

@@ -804,6 +804,11 @@ export function createApp(config = {}) {
     return Number(r.lastInsertRowid);
   }
 
+  route('GET', '/api/questions/:id', STAFF, ({ user, params }) => {
+    const row = db.get('SELECT * FROM questions WHERE id = ? AND school_id = ?', params.id, user.school_id);
+    if (!row) fail(404, 'Không tìm thấy câu hỏi.');
+    return { question: toQuestion(row) };
+  });
   route('POST', '/api/questions', STAFF, ({ user, body, ip }) => {
     if (!QUESTION_TYPES[body.type]) fail(400, 'Chọn loại câu: trắc nghiệm, đúng/sai hoặc trả lời ngắn.');
     const canAutoApprove = body.autoApprove === true && reviewPolicy(user.school_id) !== 'double' && validateQuestion(body).length === 0;
@@ -954,6 +959,100 @@ export function createApp(config = {}) {
     invalidateQuestionIndex(user.school_id);
     audit(user, 'question_archive', ids.map((x) => `#${x}`).join(' '), ip, { target: rows.map((q) => `question:${q.id}`).join(','), old: rows.map((q) => ({ id: q.id, status: q.status })), new: { status: 'archived' } });
     return { ok: true };
+  });
+
+  // ---- NGÂN HÀNG: ĐỘ PHỦ (chuyên đề × mức × loại) và CÂU CẦN SỬA (gom từ mọi lần dùng) ----
+  route('GET', '/api/bank/coverage', STAFF, ({ user }) => {
+    const rows = db.all("SELECT topic, level, type, COUNT(*) n FROM questions WHERE school_id = ? AND status = 'approved' GROUP BY topic, level, type", user.school_id);
+    const cell = {};
+    for (const r of rows) cell[`${r.topic}|${r.level}|${r.type}`] = r.n;
+    const topics = TOPICS.map((t) => {
+      const levels = {};
+      let total = 0;
+      for (const lv of [1, 2, 3]) {
+        levels[lv] = {};
+        for (const ty of ['mcq', 'tf', 'short']) {
+          const n = cell[`${t.code}|${lv}|${ty}`] ?? 0;
+          levels[lv][ty] = n;
+          total += n;
+        }
+      }
+      return { code: t.code, name: t.name, grade: t.grade, total, levels };
+    });
+    // Số đề thi thử (12/4/6) ghép được mà không lặp câu: giới hạn bởi loại câu khan hiếm nhất
+    const byType = { mcq: 0, tf: 0, short: 0 };
+    for (const r of rows) byType[r.type] += r.n;
+    const need = OFFICIAL_BLUEPRINT.counts;
+    const mockExams = Math.min(...Object.keys(need).map((ty) => Math.floor(byType[ty] / need[ty])));
+    const g12 = topics.filter((t) => t.grade === 12);
+    const thin = topics.filter((t) => t.total < 6).map((t) => t.code);
+    return { topics, byType, mockExams, need, thin, grade12Total: g12.reduce((s, t) => s + t.total, 0) };
+  });
+
+  route('GET', '/api/bank/quality', STAFF, ({ user }) => {
+    // Gom mọi bài làm đã nộp của trường: tỉ lệ điểm, độ phân biệt (27% trên/dưới theo từng bài giao), phương án được chọn, số em phân vân
+    const atts = db.all("SELECT id, assignment_id, score10, layout_json, responses_json, result_json, flagged_json FROM attempts WHERE school_id = ? AND status != 'in_progress' AND score10 IS NOT NULL", user.school_id);
+    const stat = {};
+    const byAsg = {};
+    for (const t of atts) (byAsg[t.assignment_id ?? `p${t.id}`] ??= []).push(t);
+    const S = (qid) => (stat[qid] ??= { n: 0, sum: 0, up: 0, upN: 0, low: 0, lowN: 0, choices: [0, 0, 0, 0, 0], flagged: 0 });
+    for (const group of Object.values(byAsg)) {
+      const sorted = group.slice().sort((x, y) => y.score10 - x.score10);
+      const k = sorted.length >= 8 ? Math.max(1, Math.round(sorted.length * 0.27)) : 0;
+      sorted.forEach((t, idx) => {
+        for (const it of t.result?.items ?? []) {
+          const s = S(it.qid);
+          const sc = it.max ? it.points / it.max : 0;
+          s.n++;
+          s.sum += sc;
+          if (k && idx < k) { s.up += sc; s.upN++; }
+          if (k && idx >= sorted.length - k) { s.low += sc; s.lowN++; }
+        }
+        for (const q of t.flagged ?? []) S(q).flagged++;
+        for (const li of t.layout ?? []) {
+          const r = toOriginalResponse(li, t.responses?.[li.qid]);
+          const s = S(li.qid);
+          if (li.type === 'mcq' || Array.isArray(li.perm)) {
+            if (Number.isInteger(r) && r >= 0 && r <= 3) s.choices[r]++;
+            else s.choices[4]++;
+          }
+        }
+      });
+    }
+    const qs = db.all("SELECT * FROM questions WHERE school_id = ? AND status != 'archived'", user.school_id).map(toQuestion);
+    const out = [];
+    const stemKey = {};
+    for (const q of qs) {
+      const key = `${q.type}|${String(q.stem).replace(/\s+/g, ' ').trim().toLowerCase()}`;
+      (stemKey[key] ??= []).push(q.id);
+    }
+    for (const q of qs) {
+      const s = stat[q.id];
+      const issues = [];
+      const p = s && s.n ? s.sum / s.n : null;
+      const disc = s && s.upN >= 2 && s.lowN >= 2 ? s.up / s.upN - s.low / s.lowN : null;
+      if (s && s.n >= 5) {
+        if (p < 0.2) issues.push({ code: 'hard', label: 'Quá khó hoặc nghi sai đáp án' });
+        if (p > 0.95) issues.push({ code: 'easy', label: 'Quá dễ' });
+      }
+      if (disc !== null && disc < 0) issues.push({ code: 'wrong-key', label: 'Học sinh giỏi sai nhiều hơn: nghi sai đáp án' });
+      if (q.type === 'mcq' && s && s.n >= 8 && Number.isInteger(q.answer)) {
+        const top = s.choices.slice(0, 4).map((n, i) => ({ n, i })).sort((x, y) => y.n - x.n)[0];
+        if (top.i !== q.answer && top.n > s.choices[q.answer]) issues.push({ code: 'distractor-wins', label: `Phương án ${'ABCD'[top.i]} được chọn nhiều hơn đáp án` });
+        const dead = s.choices.slice(0, 4).map((n, i) => ({ n, i })).filter((x) => x.i !== q.answer && x.n === 0);
+        if (s.n >= 10 && dead.length) issues.push({ code: 'dead', label: `Phương án nhiễu ${dead.map((x) => 'ABCD'[x.i]).join(', ')} không ai chọn` });
+      }
+      if (s && s.n >= 5 && s.flagged / s.n >= 0.3) issues.push({ code: 'unsure', label: `${s.flagged}/${s.n} lượt đánh dấu còn phân vân` });
+      const dup = stemKey[`${q.type}|${String(q.stem).replace(/\s+/g, ' ').trim().toLowerCase()}`];
+      if (dup.length > 1) issues.push({ code: 'duplicate', label: `Trùng với câu #${dup.filter((x) => x !== q.id).join(', #')}` });
+      if (q.status === 'draft' && validateQuestion(q).length) issues.push({ code: 'incomplete', label: `Thiếu thông tin: ${validateQuestion(q).join(' ')}` });
+      if (issues.length) out.push({ id: q.id, type: q.type, topic: q.topic, level: q.level, status: q.status, stem: q.stem, uses: s?.n ?? 0, p, disc, issues });
+    }
+    const weight = { 'wrong-key': 0, hard: 1, 'distractor-wins': 2, incomplete: 3, duplicate: 4, unsure: 5, dead: 6, easy: 7 };
+    out.sort((x, y) => Math.min(...x.issues.map((i) => weight[i.code])) - Math.min(...y.issues.map((i) => weight[i.code])) || y.uses - x.uses);
+    const counts = {};
+    for (const q of out) for (const i of q.issues) counts[i.code] = (counts[i.code] ?? 0) + 1;
+    return { questions: out, counts, analysedAttempts: atts.length };
   });
 
   // ---- nhập đề ----
@@ -1738,6 +1837,43 @@ export function createApp(config = {}) {
       responses: orig,
       displayedResponses,
     };
+  });
+
+  // Ghi điểm phiếu tô vào bảng điểm: tạo/ghi đè bài làm của học sinh cho một bài đã giao (bài thi trên giấy)
+  route('POST', '/api/omr/record', STAFF, ({ user, body, ip }) => {
+    const asg = db.get('SELECT * FROM assignments WHERE id = ? AND school_id = ?', posInt(body.assignmentId), user.school_id);
+    if (!asg || !teacherClassIds(user).includes(asg.class_id)) fail(404, 'Không tìm thấy bài đã giao trong lớp bạn phụ trách.');
+    const sid = posInt(body.studentId);
+    const st = db.get("SELECT id, display_name FROM users WHERE id = ? AND class_id = ? AND role = 'student' AND active = 1", sid, asg.class_id);
+    if (!st || (Array.isArray(asg.target) && !asg.target.includes(st.id))) fail(400, 'Học sinh không thuộc bài giao này.');
+    const exam = db.get('SELECT * FROM exams WHERE id = ?', asg.exam_id);
+    const v = (exam.variants ?? []).find((x) => String(x.code) === String(body.variantCode ?? '')) ?? null;
+    if (!v) fail(400, `Mã đề "${body.variantCode ?? ''}" không có trong đề này.`);
+    const layout = variantLayout(exam.id, exam.items, v);
+    const p1 = Array.isArray(body.answers?.partI) ? body.answers.partI : [];
+    const p2 = Array.isArray(body.answers?.partII) ? body.answers.partII : [];
+    const p3 = Array.isArray(body.answers?.partIII) ? body.answers.partIII : [];
+    const responses = {};
+    let i1 = 0, i2 = 0, i3 = 0;
+    for (const it of layout) {
+      const q = exam.snapshot[it.qid];
+      if (!q) continue;
+      if (q.type === 'mcq') { const x = p1[i1++]; responses[it.qid] = typeof x?.selected === 'number' ? x.selected : null; }
+      else if (q.type === 'tf') { const x = p2[i2++]; responses[it.qid] = Array.isArray(x?.selected) ? x.selected : [null, null, null, null]; }
+      else { const x = p3[i3++]; responses[it.qid] = x?.value ? String(x.value) : ''; }
+    }
+    const t = now();
+    const old = db.get('SELECT id, score10, status FROM attempts WHERE assignment_id = ? AND student_id = ?', asg.id, st.id);
+    if (old) fail(409, `${st.display_name} đã có bài làm cho bài giao này${old.score10 !== null ? ` (${String(old.score10).replace('.', ',')} điểm)` : ''}. Nếu cần, sửa điểm trong bảng điểm (có ghi lý do).`);
+    const done = db.tx(() => {
+      const r = db.run(
+        'INSERT INTO attempts (school_id, assignment_id, student_id, kind, title, layout_json, started_at, deadline_at, variant_code) VALUES (?,?,?,?,?,?,?,?,?)',
+        user.school_id, asg.id, st.id, 'assignment', asg.title, JSON.stringify(layout), t, null, v.code,
+      );
+      return finalize(getAttempt(Number(r.lastInsertRowid)), responses, {}, 'submitted');
+    });
+    audit(user, 'omr_record', `${st.display_name} · bài giao #${asg.id} · mã ${v.code}`, ip, { target: `assignment:${asg.id}`, new: { score10: done.score10 } });
+    return { attemptId: done.id, score10: done.score10, student: st.display_name };
   });
 
   // ---- lớp, giao đề, báo cáo ----

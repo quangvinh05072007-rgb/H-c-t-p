@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Layers, Table2 } from 'lucide-react';
 import { download, get, post, put } from '../../api';
 import { MathText } from '../../ui/MathText';
@@ -72,6 +72,12 @@ export function Bank() {
   const { data, error, loading, reload } = useAsync(() => get(`/api/questions?${qs}`), [qs]);
   const [sel, setSel] = useState<number[]>([]);
   const [editing, setEditing] = useState<any | null>(null);
+  // Mở thẳng trình sửa khi đến từ trang Câu cần sửa (?edit=ID)
+  const editId = query.get('edit');
+  useEffect(() => {
+    if (!editId || !/^\d+$/.test(editId)) return;
+    get<{ question: any }>(`/api/questions/${editId}`).then((r) => { setEditing({ ...r.question }); setEditReason(''); }).catch((e) => toast(e.message));
+  }, [editId]);
   const [busy, setBusy] = useState(false);
   const [discussion, setDiscussion] = useState<number | null>(null);
   const [history, setHistory] = useState<number | null>(null);

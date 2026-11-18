@@ -22,6 +22,9 @@ import {
   Upload,
   User as UserIcon,
   Users as UsersIcon,
+  ScanLine,
+  Grid3X3,
+  Wrench,
 } from 'lucide-react';
 import { get, post, setSessionToken, setUnauthorizedHandler } from './api';
 import { AppCtx, AzotaLogo, ErrorBox, go, Loading, Meta, Modal, User, useRoute } from './ui/kit';
@@ -43,6 +46,8 @@ import { ExamRoom } from './pages/student/ExamRoom';
 import { ResultPage } from './pages/student/Result';
 import { AnswerReviewRoom } from './pages/student/AnswerReviewRoom';
 import { PracticeHub } from './pages/student/Practice';
+import { OmrPage } from './pages/teacher/OmrPage';
+import { BankCoverage, BankQuality } from './pages/teacher/BankInsights';
 import { MistakeNotebook } from './pages/student/MistakeNotebook';
 import { EndlessPracticeStream } from './pages/student/EndlessPracticeStream';
 import { AdminHome, Audit, Users } from './pages/admin/Admin';
@@ -296,6 +301,9 @@ export function App() {
       : [
           ['/', () => (user.role === 'admin' ? <AdminHome /> : <TeacherHome />)],
           ['/dao-de', () => <VariantShuffler />],
+          ['/cham-phieu', () => <OmrPage />],
+          ['/do-phu', () => <BankCoverage />],
+          ['/can-sua', () => <BankQuality />],
           ['/tron-de', () => <VariantShuffler />],
           ['/thu-vien', () => <Exams />],
           ['/kho-de', () => <Exams />],
@@ -345,8 +353,9 @@ export function App() {
 
   // Active state matchers for primary navigation & nested child routes
   const isHomeActive = path === '/' || path === '';
-  const isLibraryActive = pathMatchesAny(path, ['/thu-vien', '/kho-de', '/de-thi', '/ngan-hang', '/tai-lieu']);
-  const isCreateActive = pathMatchesAny(path, ['/ra-de', '/soan-de', '/de-thi-moi', '/nhap-de', '/dao-de', '/tron-de']);
+  // Đề thi: kho đề, soạn, đảo & in, chấm phiếu tô. Ngân hàng: câu hỏi, nhập, độ phủ, cần sửa.
+  const isLibraryActive = pathMatchesAny(path, ['/thu-vien', '/kho-de', '/de-thi', '/tai-lieu', '/ra-de', '/soan-de', '/de-thi-moi', '/dao-de', '/tron-de', '/cham-phieu']);
+  const isCreateActive = pathMatchesAny(path, ['/ngan-hang', '/nhap-de', '/do-phu', '/can-sua']);
   const isClassesActive = pathMatchesAny(path, [
     '/lop-hoc',
     '/lop',
@@ -377,14 +386,17 @@ export function App() {
   const isStudentResultsActive = pathMatchesAny(path, ['/ket-qua', '/tien-bo', '/khieu-nai']);
 
   const librarySubItems: SubItem[] = [
-    { path: '/thu-vien', label: 'Kho đề thi', icon: FolderOpen },
-    { path: '/ngan-hang', label: 'Ngân hàng câu hỏi', icon: Database },
+    { path: '/thu-vien', label: 'Kho đề', icon: FolderOpen },
+    { path: '/ra-de', label: 'Soạn đề', icon: FilePlus2 },
+    { path: '/dao-de', label: 'Đảo đề & In', icon: Shuffle },
+    { path: '/cham-phieu', label: 'Chấm phiếu tô', icon: ScanLine },
   ];
 
   const createSubItems: SubItem[] = [
-    { path: '/ra-de', label: 'Tạo đề mới', icon: FilePlus2 },
-    { path: '/nhap-de', label: 'Nhập đề', icon: Upload },
-    { path: '/dao-de', label: 'Đảo đề', icon: Shuffle },
+    { path: '/ngan-hang', label: 'Câu hỏi', icon: Database },
+    { path: '/nhap-de', label: 'Nhập', icon: Upload },
+    { path: '/do-phu', label: 'Độ phủ', icon: Grid3X3 },
+    { path: '/can-sua', label: 'Cần sửa', icon: Wrench },
   ];
 
   const utilitySubItems: SubItem[] = [
@@ -602,13 +614,13 @@ export function App() {
                   </div>
                 </div>
 
-                {/* 2. Kho đề (Kho đề thi + Ngân hàng câu hỏi) */}
+                {/* 2. Đề thi (Kho đề, Soạn đề, Đảo đề & In, Chấm phiếu tô) */}
                 <div className="nav-item-group">
                   <div className={`nav-item-row ${isLibraryActive || openPopover === 'library' ? 'is-active' : ''}`}>
                     <a
                       href="#/thu-vien"
-                      aria-label="Kho đề"
-                      title={sidebarCollapsed ? 'Kho đề' : undefined}
+                      aria-label="Đề thi"
+                      title={sidebarCollapsed ? 'Đề thi' : undefined}
                       aria-current={isLibraryActive ? 'page' : undefined}
                       className="nav nav-primary-link"
                       onClick={(e) => {
@@ -621,13 +633,13 @@ export function App() {
                       }}
                     >
                       <FolderOpen size={18} />
-                      {!sidebarCollapsed && <span className="rail-label">Kho đề</span>}
+                      {!sidebarCollapsed && <span className="rail-label">Đề thi</span>}
                     </a>
                     {!sidebarCollapsed && (
                       <button
                         type="button"
                         className="nav-chevron-btn"
-                        aria-label="Mở menu con Kho đề"
+                        aria-label="Mở menu con Đề thi"
                         aria-haspopup="menu"
                         aria-expanded={openPopover === 'library'}
                         onClick={() => togglePopover('library')}
@@ -636,16 +648,16 @@ export function App() {
                       </button>
                     )}
                   </div>
-                  {openPopover === 'library' && renderPopoverMenu(librarySubItems, false, 'Kho đề')}
+                  {openPopover === 'library' && renderPopoverMenu(librarySubItems, false, 'Đề thi')}
                 </div>
 
-                {/* 3. Tạo đề (Tạo đề mới + Nhập đề + Đảo đề) */}
+                {/* 3. Ngân hàng (Câu hỏi, Nhập, Độ phủ, Cần sửa) */}
                 <div className="nav-item-group">
                   <div className={`nav-item-row ${isCreateActive || openPopover === 'create' ? 'is-active' : ''}`}>
                     <a
-                      href="#/ra-de"
-                      aria-label="Tạo đề"
-                      title={sidebarCollapsed ? 'Tạo đề' : undefined}
+                      href="#/ngan-hang"
+                      aria-label="Ngân hàng"
+                      title={sidebarCollapsed ? 'Ngân hàng' : undefined}
                       aria-current={isCreateActive ? 'page' : undefined}
                       className="nav nav-primary-link"
                       onClick={(e) => {
@@ -657,14 +669,14 @@ export function App() {
                         }
                       }}
                     >
-                      <FilePlus2 size={18} />
-                      {!sidebarCollapsed && <span className="rail-label">Tạo đề</span>}
+                      <Database size={18} />
+                      {!sidebarCollapsed && <span className="rail-label">Ngân hàng</span>}
                     </a>
                     {!sidebarCollapsed && (
                       <button
                         type="button"
                         className="nav-chevron-btn"
-                        aria-label="Mở menu con Tạo đề"
+                        aria-label="Mở menu con Ngân hàng"
                         aria-haspopup="menu"
                         aria-expanded={openPopover === 'create'}
                         onClick={() => togglePopover('create')}
@@ -673,7 +685,7 @@ export function App() {
                       </button>
                     )}
                   </div>
-                  {openPopover === 'create' && renderPopoverMenu(createSubItems, false, 'Tạo đề')}
+                  {openPopover === 'create' && renderPopoverMenu(createSubItems, false, 'Ngân hàng')}
                 </div>
 
                 {/* 4. Lớp học */}
@@ -809,7 +821,7 @@ export function App() {
                   onClick={() => togglePopover('library')}
                 >
                   <FolderOpen size={19} />
-                  <span>Kho đề</span>
+                  <span>Đề thi</span>
                 </button>
                 <button
                   type="button"
@@ -818,8 +830,8 @@ export function App() {
                   aria-expanded={openPopover === 'create'}
                   onClick={() => togglePopover('create')}
                 >
-                  <FilePlus2 size={19} />
-                  <span>Tạo đề</span>
+                  <Database size={19} />
+                  <span>Ngân hàng</span>
                 </button>
                 <a
                   href="#/lop-hoc"
@@ -853,7 +865,7 @@ export function App() {
               className="nav-mobile-popover"
               role="menu"
               aria-label={
-                openPopover === 'library' ? 'Kho đề' : openPopover === 'create' ? 'Tạo đề' : 'Tài khoản & Tiện ích'
+                openPopover === 'library' ? 'Đề thi' : openPopover === 'create' ? 'Ngân hàng' : 'Tài khoản & Tiện ích'
               }
             >
               {openPopover === 'utilities' && (

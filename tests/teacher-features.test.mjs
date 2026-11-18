@@ -83,3 +83,50 @@ test('Phân tích câu: có thời gian trung vị và số em đánh dấu phâ
   assert.ok(item.medianSec > 0);
   assert.ok(item.flags.some((f) => /phân vân/.test(f)));
 });
+
+test('Độ phủ ngân hàng: bảng đủ 23 chuyên đề × 3 mức × 3 loại, số đề thi thử ghép được khớp số câu', async () => {
+  const lan = await login('gv.lan');
+  const r = await lan.get('/api/bank/coverage');
+  assert.equal(r.status, 200);
+  assert.equal(r.data.topics.length, 23);
+  const sum = r.data.topics.reduce((s, t) => s + t.total, 0);
+  assert.equal(sum, r.data.byType.mcq + r.data.byType.tf + r.data.byType.short);
+  assert.equal(r.data.mockExams, Math.min(Math.floor(r.data.byType.mcq / 12), Math.floor(r.data.byType.tf / 4), Math.floor(r.data.byType.short / 6)));
+  const hs = await login('hs.an.nm');
+  assert.equal((await hs.get('/api/bank/coverage')).status, 403);
+});
+
+test('Câu cần sửa: gắn nhãn từ bài làm, phát hiện câu trùng; mở câu theo id', async () => {
+  const lan = await login('gv.lan');
+  const q = app.db.get("SELECT * FROM questions WHERE status = 'approved' AND type = 'mcq' LIMIT 1");
+  // Tạo bản trùng hệt để kiểm tra nhãn trùng
+  await lan.post('/api/questions', { type: 'mcq', stem: q.stem, options: q.options, answer: q.answer, topic: q.topic, level: q.level });
+  const r = await lan.get('/api/bank/quality');
+  assert.equal(r.status, 200);
+  assert.ok(r.data.analysedAttempts > 0);
+  const dup = r.data.questions.find((x) => x.id === q.id);
+  assert.ok(dup && dup.issues.some((i) => i.code === 'duplicate'));
+  const one = await lan.get(`/api/questions/${q.id}`);
+  assert.equal(one.status, 200);
+  assert.equal(one.data.question.id, q.id);
+});
+
+test('Ghi điểm phiếu tô vào bảng điểm: đúng mã đề, không ghi đè bài đã có, chặn lớp khác', async () => {
+  const lan = await login('gv.lan');
+  const asg = app.db.get("SELECT a.* FROM assignments a JOIN classes c ON c.id = a.class_id WHERE c.name = '12A1' AND a.title LIKE 'Đề Khảo Sát%'");
+  const exam = app.db.get('SELECT variants_json FROM exams WHERE id = ?', asg.exam_id);
+  const code = exam.variants[0].code;
+  const st = app.db.get("SELECT u.id FROM users u WHERE u.class_id = ? AND u.role = 'student' AND NOT EXISTS (SELECT 1 FROM attempts t WHERE t.assignment_id = ? AND t.student_id = u.id)", asg.class_id, asg.id);
+  const answers = { partI: Array.from({ length: 12 }, () => ({ selected: 0 })), partII: Array.from({ length: 4 }, () => ({ selected: [true, false, true, false] })), partIII: Array.from({ length: 6 }, () => ({ value: '1' })) };
+  const bad = await lan.post('/api/omr/record', { assignmentId: asg.id, studentId: st.id, variantCode: 'XYZ', answers });
+  assert.equal(bad.status, 400);
+  const ok = await lan.post('/api/omr/record', { assignmentId: asg.id, studentId: st.id, variantCode: code, answers });
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  assert.equal(typeof ok.data.score10, 'number');
+  const att = app.db.get('SELECT status, variant_code FROM attempts WHERE assignment_id = ? AND student_id = ?', asg.id, st.id);
+  assert.equal(att.status, 'submitted');
+  assert.equal(att.variant_code, code);
+  assert.equal((await lan.post('/api/omr/record', { assignmentId: asg.id, studentId: st.id, variantCode: code, answers })).status, 409);
+  const minh = await login('gv.minh');
+  assert.equal((await minh.post('/api/omr/record', { assignmentId: asg.id, studentId: st.id, variantCode: code, answers })).status, 404);
+});
