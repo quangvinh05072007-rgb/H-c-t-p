@@ -8,8 +8,6 @@ import { createApp } from '../server/app.mjs';
 import { seedSample, SAMPLE_PASSWORD } from '../server/seed.mjs';
 
 const clock = Date.parse('2026-10-19T08:00:00+07:00');
-let aiNext = 'Bước 1. …\nĐáp án: B';
-const fakeAi = { enabled: true, model: 'fake-ai', explain: async () => aiNext };
 let server;
 let url;
 let app;
@@ -17,7 +15,7 @@ let lan;
 let minh;
 let khac;
 before(async () => {
-  app = createApp({ dbFile: ':memory:', clock: () => clock, aiImpl: fakeAi });
+  app = createApp({ dbFile: ':memory:', clock: () => clock, aiImpl: { enabled: false } });
   seedSample(app);
   server = http.createServer(app.handle);
   await new Promise((r) => server.listen(0, r));
@@ -52,94 +50,6 @@ function client() {
   };
 }
 const audits = (action) => app.db.all('SELECT * FROM audit_log WHERE action = ? ORDER BY id', action);
-
-test('Đọc kết luận đáp án từ lời giải AI viết', () => {
-  assert.equal(answerFromSolution('mcq', 'Bước 1…\nĐáp án: C'), 2);
-  assert.equal(answerFromSolution('mcq', 'Đáp án: A\nGhi chú\n**Đáp án:** D'), 3, 'lấy dòng cuối');
-  assert.equal(answerFromSolution('mcq', 'Chọn B nên đúng'), null, 'không có dòng đáp án → không đoán');
-  assert.deepEqual(answerFromSolution('tf', 'Đáp án: ĐSĐS'), [true, false, true, false]);
-  assert.equal(answerFromSolution('short', 'Đáp án: 1,5'), '1,5');
-  assert.equal(parseAnswerLine('mcq', 'Chọn B.'), 1);
-  assert.equal(parseAnswerLine('mcq', 'không rõ'), null);
-});
-
-let qid;
-test('AI viết lời giải: chỉ là nháp riêng, đối chiếu đáp án, học sinh không thấy nháp', async () => {
-  const mk = await lan.post('/api/questions', { type: 'mcq', stem: 'Tính $1+1$.', options: ['1', '2', '3', '4'], answer: 1, topic: 'T10.MENHDE', level: 1, explanation: 'Lời giải cũ của giáo viên.' });
-  qid = mk.data.id;
-  await lan.post('/api/questions/approve', { ids: [qid] });
-  const before = app.db.get('SELECT COUNT(*) n FROM questions').n;
-  aiNext = 'Bước 1. Cộng hai số.\nBước 2. $1+1=2$.\nĐáp án: B';
-  const r = await lan.post('/api/ai/explain', { id: qid });
-  assert.equal(r.status, 200);
-  assert.equal(r.data.check.matches, true);
-  assert.equal(r.data.check.aiAnswer, 1);
-  assert.equal(app.db.get('SELECT COUNT(*) n FROM questions').n, before, 'không tạo câu mới');
-  const row = app.db.get('SELECT explanation, explanation_draft FROM questions WHERE id = ?', qid);
-  assert.equal(row.explanation, 'Lời giải cũ của giáo viên.', 'lời giải chính thức chưa đổi');
-  assert.match(row.explanation_draft, /Bước 2/);
-  const listed = (await lan.get('/api/questions')).data.questions.find((q) => q.id === qid);
-  assert.match(listed.explanationDraft, /Bước 1/);
-  assert.equal(listed.draftCheck.matches, true);
-
-  // học sinh làm câu này rồi xem kết quả: không có nháp ở bất kỳ đâu trong phản hồi
-  const exam = (await lan.post('/api/exams', { title: 'Nháp', items: [{ qid }], durationMin: 10, variants: 1, seed: 'x' })).data.id;
-  const cls = (await lan.get('/api/classes')).data.classes[0];
-  const asg = (await lan.post('/api/assignments', { examId: exam, classId: cls.id, mode: 'homework', openAt: clock - 1000, closeAt: clock + 86400000 })).data.ids[0];
-  const stu = app.db.get("SELECT username FROM users WHERE class_id = ? AND role = 'student' ORDER BY id", cls.id);
-  const s = client();
-  await s.login(stu.username);
-  const att = (await s.post('/api/attempts/start', { assignmentId: asg })).data;
-  assert.ok(!JSON.stringify(att).includes('Bước 1'));
-  const done = await s.post(`/api/attempts/${att.id}/submit`, { responses: { [qid]: 0 }, version: 1 });
-  const dump = JSON.stringify(done.data) + JSON.stringify((await s.get(`/api/attempts/${att.id}/result`)).data);
-  assert.ok(!dump.includes('Bước 1') && !dump.includes('explanationDraft') && !dump.includes('draftCheck'), 'học sinh không nhận lời giải nháp');
-  assert.match(dump, /Lời giải cũ của giáo viên/, 'học sinh thấy lời giải đã duyệt');
-  assert.equal((await s.post('/api/ai/explain', { id: qid })).status, 403);
-});
-
-test('Duyệt lời giải nháp: thay lời giải, lưu phiên bản cũ, ghi nhật ký; bỏ nháp; người trường khác bị chặn', async () => {
-  assert.equal((await khac.post('/api/ai/explain', { id: qid })).status, 404);
-  assert.equal((await khac.post(`/api/questions/${qid}/draft/approve`, {})).status, 403);
-  assert.equal(audits('explanation_approve').filter((a) => a.outcome === 'denied').length, 1);
-  const ok = await lan.post(`/api/questions/${qid}/draft/approve`, { text: 'Bước 1. Cộng hai số.\nBước 2. $1+1=2$.\nVậy chọn B.' });
-  assert.equal(ok.status, 200);
-  const row = app.db.get('SELECT explanation, explanation_draft, draft_check_json FROM questions WHERE id = ?', qid);
-  assert.match(row.explanation, /Vậy chọn B/);
-  assert.equal(row.explanation_draft, null);
-  assert.equal(row.draft_check, null);
-  const a = audits('explanation_approve').filter((x) => x.outcome === 'ok');
-  assert.equal(a.length, 1);
-  assert.equal(a[0].old.explanation, 'Lời giải cũ của giáo viên.');
-  assert.match(a[0].detail, /đã sửa tay/);
-  const versions = (await lan.get(`/api/questions/${qid}/versions`)).data.versions;
-  assert.equal(versions[0].snapshot.explanation, 'Lời giải cũ của giáo viên.');
-  assert.equal((await lan.post(`/api/questions/${qid}/draft/approve`, {})).status, 400, 'hết nháp');
-
-  aiNext = 'Đáp án: B';
-  await lan.post('/api/ai/explain', { id: qid });
-  assert.equal((await lan.post(`/api/questions/${qid}/draft/reject`)).status, 200);
-  assert.equal(app.db.get('SELECT explanation_draft FROM questions WHERE id = ?', qid).explanation_draft, null);
-  assert.equal(audits('explanation_reject').length, 1);
-});
-
-test('AI tự giải ra đáp án KHÁC đáp án đã duyệt: cảnh báo, không duyệt được nếu chưa xác nhận', async () => {
-  aiNext = 'Bước 1. Tính nhầm.\nĐáp án: C';
-  const r = await lan.post('/api/ai/explain', { id: qid });
-  assert.equal(r.data.check.matches, false);
-  assert.equal(r.data.check.aiAnswer, 2);
-  assert.match(audits('ai_explain').at(-1).detail, /đáp án khác/);
-  const blocked = await lan.post(`/api/questions/${qid}/draft/approve`, {});
-  assert.equal(blocked.status, 409);
-  assert.equal(blocked.data.mismatch, true);
-  assert.equal(app.db.get('SELECT explanation_draft IS NOT NULL ok FROM questions WHERE id = ?', qid).ok, 1, 'nháp còn nguyên');
-  assert.equal((await lan.post(`/api/questions/${qid}/draft/approve`, { confirmMismatch: true })).status, 200);
-  assert.ok(audits('explanation_approve').some((x) => /xác nhận dù AI ra đáp án khác/.test(x.reason ?? '')));
-  // không có dòng "Đáp án" → không kết luận được, không chặn
-  aiNext = 'Chỉ có lời giải, quên kết luận.';
-  const none = await lan.post('/api/ai/explain', { id: qid });
-  assert.equal(none.data.check.matches, null);
-});
 
 test('Nhóm yếu theo chuyên đề: chỉ lớp mình dạy; giao phiếu luyện đúng nhóm, đúng học sinh mới thấy', async () => {
   const cls = (await lan.get('/api/classes')).data.classes[0];

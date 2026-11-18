@@ -4,14 +4,12 @@ import { MathText } from './MathText';
 import { useApp } from './kit';
 import { post } from '../api';
 const RichField=lazy(()=>import('./RichField'));
-const MathOcrReview=lazy(()=>import('./MathOcrReview'));
 
 export type Draft = { id?: number; type: 'mcq' | 'tf' | 'short'; stem: string; options: string[]; answer: any; explanation: string; topic: string | null; level: number; distractors?: any; group_id?: string | null; ocrText?: string; sourceStem?: string };
 
 export function QuestionEditor({ q, onChange }: { q: Draft; onChange: (q: Draft) => void }) {
   const { meta } = useApp();
   const uid = useId();
-  const [mathOcr,setMathOcr]=useState(false);
   const [duplicates, setDuplicates] = useState<any[]>([]);
   const [showDups, setShowDups] = useState(false);
   const [testExpr, setTestExpr] = useState('');
@@ -73,7 +71,7 @@ export function QuestionEditor({ q, onChange }: { q: Draft; onChange: (q: Draft)
   };
   return (
     <div className={`question-editor ${original?'has-source':''}`}>
-      {original&&<aside className="question-source"><h3>Ảnh gốc đối chiếu</h3><MathText as="div" text={original}/><p className="tiny muted">Giữ nguyên hình và công thức gốc để kiểm tra nội dung sau khi sửa.</p>{q.stem===original&&q.ocrText&&<button className="btn sm" type="button" onClick={()=>set({sourceStem:original,stem:q.ocrText??''})}>Soạn lại từ chữ OCR</button>}{meta.mathOcrAvailable&&<button className="btn sm mt" type="button" onClick={()=>setMathOcr(true)}>Nhận dạng công thức · thử nghiệm</button>}<p className="tiny muted">Chữ OCR có thể sai ký hiệu Toán. Hãy kiểm tra từng công thức.</p></aside>}
+      {original&&<aside className="question-source"><h3>Ảnh gốc đối chiếu</h3><MathText as="div" text={original}/><p className="tiny muted">Giữ nguyên hình và công thức gốc để kiểm tra nội dung sau khi sửa.</p>{q.stem===original&&q.ocrText&&<button className="btn sm" type="button" onClick={()=>set({sourceStem:original,stem:q.ocrText??''})}>Soạn lại từ chữ OCR</button>}</aside>}
     <div className="stack question-edit-content">
       <div className="row">
         <div className="seg">
@@ -207,7 +205,6 @@ export function QuestionEditor({ q, onChange }: { q: Draft; onChange: (q: Draft)
         <Suspense fallback={<span className="tiny muted">Đang mở trình soạn…</span>}><RichField label="Lời giải" value={q.explanation} onChange={explanation=>set({explanation})}/></Suspense>
       </div>
     </div>
-    {mathOcr&&<Suspense fallback={<p className="tiny muted">Đang mở nhận dạng…</p>}><MathOcrReview type={q.type} sourceStem={original} onClose={()=>setMathOcr(false)} onApply={candidate=>set({sourceStem:original,stem:candidate.stem,options:candidate.options,answer:q.type==='tf'?[null,null,null,null]:null})}/></Suspense>}
     </div>
   );
 }

@@ -489,31 +489,6 @@ export function ExamBuilder() {
     }
   };
 
-  const generateAiSimilarAt = async (idx: number) => {
-    const it = gen?.items?.[idx];
-    if (!it || !meta.aiEnabled) return;
-    setBusy(true);
-    try {
-      const r = await post<{ id: number }>('/api/ai/similar', { id: it.qid });
-      // Auto approve if single review
-      await post('/api/questions/approve', { ids: [r.id] }).catch(() => {});
-      const fetchRes = await get<any>(`/api/questions?status=all&limit=100`);
-      const newQ = (fetchRes.questions || []).find((q: any) => q.id === r.id);
-      if (newQ && newQ.status === 'approved') {
-        const items = gen.items.map((x: any, i: number) =>
-          i === idx ? { qid: newQ.id, type: newQ.type, topic: newQ.topic, level: newQ.level } : x,
-        );
-        applyItemsChange(items, { ...gen.questions, [newQ.id]: newQ });
-        toast(`AI đã tạo & thay thế bằng câu tương tự #${newQ.id}!`);
-      } else {
-        toast(`AI đã tạo câu nháp #${r.id} trong Ngân hàng để bạn kiểm tra.`);
-      }
-    } catch (e: any) {
-      toast(e.message || 'Không gọi được AI.');
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const persistExam = async (): Promise<number | null> => {
     if (!gen?.items?.length || !title.trim()) {
@@ -646,17 +621,6 @@ export function ExamBuilder() {
                     >
                       <RefreshCw size={12} /> Đổi
                     </button>
-                    {meta.aiEnabled && (
-                      <button
-                        type="button"
-                        className="a4-tool-btn"
-                        disabled={busy}
-                        onClick={() => generateAiSimilarAt(idx)}
-                        title="AI sinh câu tương tự thay thế"
-                      >
-                        <Sparkles size={12} /> AI
-                      </button>
-                    )}
                     <button
                       type="button"
                       className="a4-tool-btn is-danger"

@@ -301,12 +301,12 @@ test('Chống CSRF: yêu cầu ghi không phải JSON bị từ chối', async (
   assert.equal(r.status, 400);
 });
 
-test('AI tắt: chức năng AI trả lời rõ cách bật, không giả kết quả', async () => {
+test('Không có AI: ảnh và PDF scan bị từ chối rõ ràng, hướng dẫn chuyển sang Word hoặc gói nhập', async () => {
   const meta = await teacher.get('/api/meta');
-  assert.equal(meta.data.aiEnabled, false);
+  assert.equal(meta.data.aiEnabled, undefined);
   const img = await teacher.call('POST', '/api/import?filename=de.png', Buffer.from([1, 2, 3]));
-  assert.equal(img.status, 503);
-  assert.match(img.data.error, /GEMINI_API_KEY/);
+  assert.equal(img.status, 400);
+  assert.match(img.data.error, /gói nhập/);
 });
 
 test('Xưởng A4 & Nhập đề: autoApprove câu hỏi, quét trùng lặp hàng loạt và cập nhật đề thi (PUT /api/exams/:id)', async () => {

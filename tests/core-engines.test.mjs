@@ -91,37 +91,6 @@ test('PDF Unicode & DOCX Answer Sheet Export tạo file hợp lệ thuần Node.
   assert.match(docXml, /Mã đề 101/);
 });
 
-test('Gemini Multimodal image importer trích xuất câu hỏi có cấu trúc & đối chiếu ảnh gốc', async () => {
-  const fakePng = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]);
-  const mockAi = {
-    enabled: true,
-    async extractExamFromImages(pages) {
-      assert.equal(pages.length, 1);
-      return [
-        {
-          part: 1,
-          num: 1,
-          page: 1,
-          type: 'mcq',
-          stem: 'Tính $\\int_0^1 3x^2\\,dx$.',
-          options: ['1', '2', '3', '4'],
-          answer: 0,
-          explanation: 'Nguyên hàm là $x^3$.',
-          hasFigure: false,
-          level: 1,
-          fromAi: true,
-        },
-      ];
-    },
-  };
-  const out = await importFile('de-chup.png', fakePng, mockAi);
-  assert.equal(out.info.engine, 'Gemini Multimodal AI');
-  assert.equal(out.questions.length, 1);
-  assert.equal(out.questions[0].fromAi, true);
-  assert.equal(out.questions[0].sourceStem, '[[img:img_src]]');
-  assert.equal(out.images.length, 1);
-});
-
 test('API end-to-end: GET /api/exams/:id/pdf, GET /api/exams/:id/variants-zip và tìm kiếm MiniSearch', async () => {
   const app = createApp({ dbFile: ':memory:', aiImpl: { enabled: false } });
   seedSample(app);
@@ -141,7 +110,7 @@ test('API end-to-end: GET /api/exams/:id/pdf, GET /api/exams/:id/variants-zip v�
 
     const metaRes = await fetch(`${base}/api/meta`);
     const meta = await metaRes.json();
-    assert.equal(meta.aiProvider, 'gemini');
+    assert.equal(meta.aiProvider, undefined);
     assert.equal(meta.mathVerifyAvailable, true);
     assert.equal(meta.coreEngines.computeEngine, true);
     assert.equal(meta.coreEngines.miniSearch, true);

@@ -222,16 +222,6 @@ export function InfiniteQuestionBank({
     }
   };
 
-  const handleAiSimilar = async (q: QuestionItem) => {
-    try {
-      toast('Đang kích hoạt AI tạo câu tương tự…');
-      const res = await post<any>('/api/ai/similar', { id: q.id });
-      toast(`Đã tạo câu nháp mới #${res.id} thành công!`);
-      loadBatch(true);
-    } catch (e: any) {
-      toast(e.message || 'Lỗi khi gọi AI.');
-    }
-  };
 
   const allLoadedSelected = questions.length > 0 && questions.every((q) => selectedIds.includes(q.id));
 
@@ -467,16 +457,6 @@ export function InfiniteQuestionBank({
                       Sửa
                     </button>
                   )}
-                  {meta.aiEnabled && (
-                    <button
-                      type="button"
-                      className="btn ghost sm"
-                      title="Dùng AI tạo câu hỏi tương tự"
-                      onClick={() => handleAiSimilar(q)}
-                    >
-                      AI tương tự
-                    </button>
-                  )}
                 </div>
               </div>
 
@@ -597,15 +577,6 @@ export function InfiniteQuestionBank({
                 }}
               >
                 Chỉnh sửa câu này
-              </button>
-            )}
-            {meta.aiEnabled && (
-              <button
-                type="button"
-                className="btn ghost sm"
-                onClick={() => handleAiSimilar(previewQuestion)}
-              >
-                AI tạo câu tương tự
               </button>
             )}
           </div>

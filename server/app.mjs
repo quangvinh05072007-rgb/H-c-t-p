@@ -6,7 +6,6 @@ import { openDb, toQuestion } from './db.mjs';
 import { hashPassword, verifyPassword, verifyPasswordAsync, newToken, tempPassword, LoginLimiter, parseCookies, safeCsvCell, sanitizeFilename, posInt } from './security.mjs';
 import { importFile, importText, answerFileToText, answerEntriesFromText, tagDrafts } from './importers.mjs';
 import { applyAnswerEntries, answerFromSolution, sameAnswer } from '../shared/parse.mjs';
-import { makeAi } from './ai.mjs';
 import { gradeAttempt, gradeQuestion } from '../shared/grading.mjs';
 import { vnDay, scheduleReview, startOfDayMs, isDue, overdueDays } from '../shared/spaced.mjs';
 import { buildProgress } from '../shared/progress.mjs';
@@ -25,7 +24,6 @@ import { SAMPLE_QUESTIONS } from './seedQuestions.mjs';
 import { registerReports } from './reports.mjs';
 import { registerFamily } from './family.mjs';
 import { ImportJobs } from './import-jobs.mjs';
-import { mathOcrAvailable, recognizeMathImages } from './math-ocr.mjs';
 import { isMathVerifyAvailable, verifyMathEquivalence, validateMathExpression } from './math-verify.mjs';
 import { findDuplicates, QuestionSearchIndex } from '../shared/duplicate-detector.mjs';
 import { isOmrAvailable, processOmrImage, generateOmrTemplateHtml } from './omr.mjs';
@@ -73,7 +71,6 @@ export function createApp(config = {}) {
   const db = openDb(config.dbFile ?? ':memory:');
   let clockFn = config.clock ?? (() => Date.now());
   const now = () => clockFn();
-  const ai = config.aiImpl ?? makeAi(config);
   const limiter = new LoginLimiter();
   const mathLimiter = new LoginLimiter(120, 60 * 1000, 5000);
   const distDir = config.distDir;
@@ -669,14 +666,10 @@ export function createApp(config = {}) {
     errorTypes: ERROR_TYPES,
     types: QUESTION_TYPES,
     officialBlueprint: OFFICIAL_BLUEPRINT,
-    aiEnabled: ai.enabled,
-    aiProvider: 'gemini',
-    mathOcrAvailable: mathOcrAvailable(),
     mathVerifyAvailable: isMathVerifyAvailable(),
     omrAvailable: isOmrAvailable(),
     coreEngines: {
       computeEngine: true,
-      geminiMultimodal: ai.enabled,
       miniSearch: true,
       pdfExport: true,
       docxExport: true,
@@ -684,7 +677,6 @@ export function createApp(config = {}) {
     lanIps: user && ['admin', 'teacher'].includes(user.role)
       ? Object.values(os.networkInterfaces()).flat().filter((a) => a && a.family === 'IPv4' && !a.internal).map((a) => a.address)
       : [],
-    aiHint: ai.enabled ? null : 'Chưa cấu hình GEMINI_API_KEY trong Settings > Secrets để bật bóc tách PDF/ảnh đa phương thức.',
     serverNow: now(),
   }));
 
@@ -973,7 +965,7 @@ export function createApp(config = {}) {
   const importJobs=new ImportJobs(db,async(job,options)=>{
     const owner=db.get('SELECT * FROM users WHERE id=? AND school_id=? AND active=1',job.owner_id,job.school_id);
     if(!owner||!['teacher','admin'].includes(owner.role))fail(403,'Tài khoản tạo tác vụ không còn quyền nhập đề.');
-    const result=job.meta?.engine==='marker'?await recognizeMathImages(job.input,job.meta,options):await (config.importRunner??importFile)(job.name,Buffer.from(job.input),ai,options);
+    const result=await (config.importRunner??importFile)(job.name,Buffer.from(job.input),options);
     options.signal.throwIfAborted();
     audit(owner,'import_parse',`${job.name}: ${result.questions.length} câu (tác vụ #${job.id})`);
     return storeImportedImages(owner,result);
@@ -987,7 +979,7 @@ export function createApp(config = {}) {
   route('POST','/api/import/jobs/:id/retry',STAFF,({user,params})=>({job:importJobs.retry(user,params.id)}));
   route('POST', '/api/import', STAFF, async ({ user, raw, query, body, ip }) => {
     let res;
-    if (query.filename) res = await importFile(String(query.filename), raw, ai);
+    if (query.filename) res = await importFile(String(query.filename), raw);
     else if (typeof body?.text === 'string') res = importText(body.text);
     else fail(400, 'Gửi file hoặc dán văn bản đề.');
     audit(user, 'import_parse', `${query.filename ?? 'văn bản dán'}: ${res.questions.length} câu, ${(res.images??[]).length} hình`, ip);
@@ -1016,15 +1008,6 @@ export function createApp(config = {}) {
     const mime=raw.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))?'image/png':raw[0]===255&&raw[1]===216&&raw[2]===255?'image/jpeg':raw.subarray(0,4).toString()==='RIFF'&&raw.subarray(8,12).toString()==='WEBP'?'image/webp':null;
     if(!mime)fail(400,'Chỉ nhận hình PNG, JPG hoặc WebP hợp lệ.');
     const id=saveImage(user,{data:raw,mime});audit(user,'image_upload',`#${id}`,ip);return {id};
-  });
-  route('POST','/api/math-ocr',STAFF,({user,body})=>{
-    if(!mathOcrAvailable())fail(503,'Bộ nhận dạng công thức chưa sẵn sàng.');
-    if(!QUESTION_TYPES[body.type])fail(400,'Chọn loại câu cần nhận dạng.');
-    const ids=[...new Set((Array.isArray(body.imageIds)?body.imageIds:[]).map(Number))];
-    if(!ids.length||ids.length>3||ids.some(id=>!Number.isInteger(id)||id<1))fail(400,'Mỗi lần nhận dạng từ 1 đến 3 ảnh gốc.');
-    const pictures=ids.map(id=>{const image=db.get('SELECT data FROM images WHERE id=? AND school_id=?',id,user.school_id);if(!image)fail(404,'Không tìm thấy hình trong trường của bạn.');return {data:Buffer.from(image.data).toString('base64')};});
-    const id=importJobs.add(user,'Nhận dạng công thức từ ảnh',Buffer.from(JSON.stringify(pictures)),{engine:'marker',type:body.type,sourceStem:ids.map(id=>`[[img:${id}]]`).join('\n')});
-    return {id};
   });
   // File đáp án rời: đọc thành bảng đáp án, rồi đối chiếu với các câu đang duyệt.
   route('POST', '/api/import/answers', STAFF, async ({ user, raw, query, body, ip }) => {
@@ -1062,58 +1045,6 @@ export function createApp(config = {}) {
   });
   route('GET', '/api/import/template.csv', STAFF, () => ({ __file: { name: 'mau-nhap-cau-hoi.csv', type: 'text/csv; charset=utf-8', data: Buffer.from(CSV_TEMPLATE, 'utf8') } }));
 
-  // ---- AI ----
-  route('POST', '/api/ai/similar', STAFF, async ({ user, body, ip }) => {
-    const q = toQuestion(db.get('SELECT * FROM questions WHERE id = ? AND school_id = ?', body.id, user.school_id));
-    if (!q) fail(404, 'Không tìm thấy câu gốc.');
-    const gen = await ai.similarQuestion(q);
-    const id = insertQuestion(user, { ...gen, type: gen.type ?? q.type, topic: q.topic, level: q.level }, 'ai_generated', 'draft', { parent_id: q.id, origin: `AI từ câu #${q.id}` });
-    audit(user, 'ai_similar', `#${q.id} → #${id}`, ip);
-    return { id };
-  });
-  // AI chỉ viết NHÁP lời giải: nằm riêng, học sinh không thấy, giáo viên phải duyệt. AI tự giải độc lập
-  // và kết luận đáp án nào thì so với đáp án đã duyệt — lệch thì cảnh báo, không cho duyệt nếu không xác nhận.
-  route('POST', '/api/ai/explain', STAFF, async ({ user, body, ip }) => {
-    const row = db.get('SELECT * FROM questions WHERE id = ? AND school_id = ?', body.id, user.school_id);
-    if (!row) fail(404, 'Không tìm thấy câu hỏi.');
-    const q = toQuestion(row);
-    const draft = await ai.explain(q);
-    const aiAnswer = answerFromSolution(q.type, draft);
-    const matches = aiAnswer === null || q.answer === null || q.answer === undefined ? null : sameAnswer(q.type, q.answer, aiAnswer);
-    const check = { aiAnswer, matches, at: now(), model: ai.model ?? null };
-    db.run('UPDATE questions SET explanation_draft = ?, draft_check_json = ? WHERE id = ?', draft, JSON.stringify(check), q.id);
-    audit(user, 'ai_explain', `#${q.id}${matches === false ? ' — AI ra đáp án khác đáp án đã duyệt' : ''}`, ip, { target: `question:${q.id}`, new: { check } });
-    return { draft, check };
-  });
-  route('POST', '/api/questions/:id/draft/approve', STAFF, ({ user, params, body, ip }) => {
-    const row = db.get('SELECT * FROM questions WHERE id = ?', params.id);
-    if (!row) fail(404, 'Không tìm thấy câu hỏi.');
-    const target = `question:${row.id}`;
-    if (row.school_id !== user.school_id) deny(user, 'explanation_approve', target, 'Câu hỏi không thuộc trường của bạn.', ip);
-    if (!row.explanation_draft) fail(400, 'Câu này không có lời giải nháp.');
-    if (row.draft_check?.matches === false && body.confirmMismatch !== true) {
-      fail(409, 'AI tự giải ra đáp án khác đáp án đã duyệt của câu này. Kiểm tra lại đáp án hoặc lời giải, rồi xác nhận nếu vẫn muốn dùng.', { mismatch: true, aiAnswer: row.draft_check.aiAnswer });
-    }
-    const text = body.text !== undefined ? String(body.text).trim() : row.explanation_draft;
-    if (!text) fail(400, 'Lời giải trống.');
-    recordVersion(row, user, 'Duyệt lời giải do AI viết');
-    db.run('UPDATE questions SET explanation = ?, explanation_draft = NULL, draft_check_json = NULL, updated_at = ? WHERE id = ?', text, now(), row.id);
-    if (reviewPolicy(user.school_id) === 'double') db.run("UPDATE questions SET status = 'draft', approvals_json = NULL, approved_by = NULL WHERE id = ?", row.id);
-    invalidateQuestionIndex(user.school_id);
-    audit(user, 'explanation_approve', `#${row.id}${body.text !== undefined ? ' (đã sửa tay)' : ''}`, ip, { target, old: { explanation: row.explanation }, new: { explanation: text }, reason: row.draft_check?.matches === false ? 'Giáo viên xác nhận dù AI ra đáp án khác' : undefined });
-    return { ok: true };
-  });
-  route('POST', '/api/questions/:id/draft/reject', STAFF, ({ user, params, ip }) => {
-    const row = db.get('SELECT * FROM questions WHERE id = ?', params.id);
-    if (!row) fail(404, 'Không tìm thấy câu hỏi.');
-    const target = `question:${row.id}`;
-    if (row.school_id !== user.school_id) deny(user, 'explanation_reject', target, 'Câu hỏi không thuộc trường của bạn.', ip);
-    db.run('UPDATE questions SET explanation_draft = NULL, draft_check_json = NULL WHERE id = ?', row.id);
-    audit(user, 'explanation_reject', `#${row.id}`, ip, { target });
-    return { ok: true };
-  });
-
-  // ---- đề thi ----
   route('POST', '/api/exams/generate', STAFF, ({ user, body }) => {
     const pool = db.all("SELECT id, type, topic, level, status FROM questions WHERE school_id = ? AND status = 'approved'", user.school_id);
     const recent = db.all('SELECT items_json FROM exams WHERE school_id = ? ORDER BY created_at DESC LIMIT 5', user.school_id).flatMap((e) => e.items.map((x) => x.qid));
@@ -4346,7 +4277,6 @@ export function createApp(config = {}) {
   return {
     handle,
     db,
-    ai,
     now,
     backupNow,
     importJobs,

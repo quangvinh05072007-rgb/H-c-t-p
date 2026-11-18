@@ -94,9 +94,9 @@ export function answerEntriesFromText(text) {
 }
 
 /**
- * Nhập một file. ai: đối tượng AI (có thể null). Trả về { questions, warnings, info, images }.
+ * Nhập một file (Word, PDF có chữ, Excel, CSV, văn bản). Không dùng AI. Trả về { questions, warnings, info, images }.
  */
-export async function importFile(name, buf, ai, options = {}) {
+export async function importFile(name, buf, options = {}) {
   const ext = (name.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toLowerCase();
   const info = { file: name, kind: ext };
   let parsed;
@@ -116,25 +116,11 @@ export async function importFile(name, buf, ai, options = {}) {
     const { text, pages, scannedPages, pageTexts } = await pdfToText(buf);
     info.pages = pages;
     if (scannedPages.length || text.replace(/\s/g, '').length < 20) {
-      if (ai?.enabled && typeof ai.extractExamFromImages === 'function') {
-        const { geminiExtractScannedPdf } = await import('./pdf-gemini.mjs');
-        const result = await geminiExtractScannedPdf(buf, pageTexts, ai, options);
-        return {
-          ...result,
-          questions: tagDrafts(result.questions, 'pdf-ai'),
-          info: { ...info, ...result.info },
-        };
-      }
-      if (scannedPages.length) {
-        const { ocrScannedPdf } = await import('./pdf-ocr.mjs');
-        const result = await ocrScannedPdf(buf, pageTexts, options);
-        return {
-          ...result,
-          questions: tagDrafts(result.questions, 'pdf-scan'),
-          info: { ...info, ...result.info },
-        };
-      }
-      throw Object.assign(new Error('PDF không có lớp chữ (bản scan) và chưa bật Gemini AI. Hãy bật GEMINI_API_KEY hoặc dùng bản Word (.docx).'), { status: 400 });
+      const pagesLabel = scannedPages.length ? ` (trang ${scannedPages.join(', ')})` : '';
+      throw Object.assign(
+        new Error(`PDF là bản scan${pagesLabel}, không có lớp chữ. App không tự đọc ảnh: hãy chuyển đề sang Word (.docx) hoặc gói nhập chuẩn (.json/.zip) rồi nhập lại.`),
+        { status: 400 },
+      );
     }
     parsed = parseExamText(text);
     info.engine = 'PDF Text';
@@ -149,44 +135,9 @@ export async function importFile(name, buf, ai, options = {}) {
     parsed = parseExamText(buf.toString('utf8'));
     info.engine = 'Văn bản / LaTeX';
   } else if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) {
-    if (!ai?.enabled) {
-      throw Object.assign(new Error('Bóc tách đề từ ảnh cần Gemini Multimodal AI. Cấu hình GEMINI_API_KEY trong Settings > Secrets để sử dụng.'), { status: 503 });
-    }
-    const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
-    if (typeof ai.extractExamFromImages === 'function') {
-      const items = await ai.extractExamFromImages([{ data: buf, mimeType: mime, page: 1 }], options);
-      const PART_ROMAN = { 1: 'I', 2: 'II', 3: 'III' };
-      parsed = {
-        questions: items.map((it, idx) => ({
-          part: PART_ROMAN[it.part] ?? (it.type === 'mcq' ? 'I' : it.type === 'tf' ? 'II' : 'III'),
-          num: it.num || idx + 1,
-          type: it.type,
-          stem: it.stem,
-          options: it.options,
-          answer: it.answer,
-          answerSources: it.answer !== null && it.answer !== undefined ? ['ai'] : [],
-          explanation: it.explanation || '',
-          level: it.level,
-          sourceStem: '[[img:img_src]]',
-          ocrText: it.stem,
-          fromAi: true,
-          warnings: it.hasFigure ? ['Ảnh gốc có hình vẽ/đồ thị — kiểm tra đối chiếu trước khi duyệt.'] : [],
-        })),
-        images: [{ key: 'img_src', mime, data: Buffer.from(buf), cx: 5000000, cy: 5000000 }],
-        warnings: ['Đã bóc tách câu hỏi và công thức LaTeX từ ảnh bằng Gemini Multimodal AI. Có thể đối chiếu trực tiếp với ảnh gốc.'],
-      };
-      info.ai = true;
-      info.engine = 'Gemini Multimodal AI';
-    } else {
-      const text = await ai.imageToText(buf, mime);
-      parsed = parseExamText(text);
-      parsed.questions.forEach((q) => (q.fromAi = true));
-      parsed.warnings.push('Chữ trong ảnh do AI đọc. Đối chiếu với ảnh gốc trước khi duyệt.');
-      info.ai = true;
-      info.engine = 'Gemini Vision Text';
-    }
+    throw Object.assign(new Error('App không tự đọc đề từ ảnh. Hãy chuyển đề sang Word (.docx) hoặc gói nhập chuẩn (.json/.zip) rồi nhập lại.'), { status: 400 });
   } else {
-    throw Object.assign(new Error(`Chưa hỗ trợ file .${ext}. Dùng .docx, .pdf, .xlsx, .csv, .txt hoặc ảnh.`), { status: 400 });
+    throw Object.assign(new Error(`Chưa hỗ trợ file .${ext}. Dùng .docx, .pdf có chữ, .xlsx, .csv, .txt hoặc gói nhập .json/.zip.`), { status: 400 });
   }
   return { questions: tagDrafts(parsed.questions, ext), warnings: parsed.warnings, info, images: parsed.images ?? [] };
 }

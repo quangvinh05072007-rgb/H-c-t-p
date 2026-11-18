@@ -6,7 +6,7 @@ import {seedSample,SAMPLE_PASSWORD} from '../server/seed.mjs';
 let app,server,base,teacher,other,student;
 async function call(cookie,method,url,body,raw){const res=await fetch(base+url,{method,headers:{cookie,'content-type':raw?'application/octet-stream':'application/json',...(raw?{'x-smartexam':'1'}:{})},body:raw??(body===undefined?undefined:JSON.stringify(body))});return {status:res.status,data:await res.json()};}
 before(async()=>{
- app=createApp({importRunner:async(name,input,ai,{onProgress})=>{onProgress({page:1,pages:1});return {questions:[{type:'mcq',stem:'Mẫu $x$ [[img:9]]',sourceStem:'[[img:9]]',ocrText:'Chữ OCR',options:['1','2','3','4'],answer:0,topic:'T11.DAOHAM',level:1}],warnings:[],info:{kind:'txt'}};}});seedSample(app);server=http.createServer(app.handle);await new Promise(r=>server.listen(0,r));base=`http://127.0.0.1:${server.address().port}`;
+ app=createApp({importRunner:async(name,input,{onProgress})=>{onProgress({page:1,pages:1});return {questions:[{type:'mcq',stem:'Mẫu $x$ [[img:9]]',sourceStem:'[[img:9]]',ocrText:'Chữ OCR',options:['1','2','3','4'],answer:0,topic:'T11.DAOHAM',level:1}],warnings:[],info:{kind:'txt'}};}});seedSample(app);server=http.createServer(app.handle);await new Promise(r=>server.listen(0,r));base=`http://127.0.0.1:${server.address().port}`;
  const login=async username=>{const r=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username,password:SAMPLE_PASSWORD})});return r.headers.get('set-cookie').split(';')[0];};
  teacher=await login('gv.lan');other=await login('gv.minh');student=await login('hs.an.nm');
 });

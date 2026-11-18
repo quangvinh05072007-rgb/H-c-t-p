@@ -62,17 +62,11 @@ Trình duyệt hỗ trợ có thể cài qua **Cài ứng dụng** hoặc **Thê
 - `npm run check` — kiểm tra kiểu + toàn bộ test + build.
 - `npm run seed -- --reset` — xóa dữ liệu và tạo ngay trường mẫu.
 
-### Bật AI (tùy chọn)
+### Không dùng AI
 
-Mọi chức năng chính chạy **không cần AI**. Để bật đọc đề từ ảnh, sinh câu tương tự, viết lời giải: tạo file `config.local.json`
-(không đưa lên git):
-
-```json
-{ "ai": { "apiKey": "sk-ant-...", "model": "claude-sonnet-5-5" } }
-```
-
-hoặc đặt biến môi trường `ANTHROPIC_API_KEY`, rồi khởi động lại. Nội dung AI tạo luôn ở trạng thái **nháp**, nhãn
-**AI Generated / AI Modified**, phải được giáo viên duyệt mới đến học sinh.
+App không gọi AI và không tự đọc ảnh hay PDF scan. Đề và tài liệu được xử lý bên ngoài rồi đưa vào bằng
+**gói nhập chuẩn** (`.json` hoặc `.zip` kèm hình) — xem [docs/goi-nhap.md](docs/goi-nhap.md). Vẫn nhập trực tiếp được
+Word (.docx giữ công thức), PDF có chữ, Excel/CSV và văn bản.
 
 ## Cấu trúc
 

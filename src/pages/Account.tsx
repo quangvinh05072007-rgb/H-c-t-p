@@ -70,7 +70,6 @@ export function Account({ onLogout }: { onLogout: () => void }) {
               </button>
             </div>
           </section>
-          {user.role !== 'student' && <section className="card"><h2>Trợ lý AI</h2>{meta.aiEnabled ? <div className="alert ok">AI đang bật. Nội dung AI tạo luôn ở trạng thái nháp, cần giáo viên duyệt.</div> : <div className="alert warn">{meta.aiHint}</div>}</section>}
           <section className="card"><h2>Quyền riêng tư</h2><p className="small muted">SmartExam chỉ lưu tên hiển thị và tên đăng nhập của học sinh — không lưu email, số điện thoại hay ngày sinh. Học sinh chỉ xem được bài của mình; giáo viên chỉ xem lớp mình dạy; mọi lần xem hồ sơ học sinh được ghi nhật ký.</p></section>
         </aside>
       </div>

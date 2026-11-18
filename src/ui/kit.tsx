@@ -32,12 +32,9 @@ export type Meta = {
   sourceHints: Record<string, string>;
   errorTypes: Record<string, { label: string; hint: string; action: string }>;
   types: Record<string, string>;
-  aiEnabled: boolean;
-  mathOcrAvailable?: boolean;
   mathVerifyAvailable?: boolean;
   omrAvailable?: boolean;
   lanIps: string[];
-  aiHint: string | null;
 };
 export type User = { id: number; role: 'admin' | 'teacher' | 'student'; username: string; displayName: string; class: { id: number; name: string; grade: number } | null; school: { id: number; name: string; sample: number }; xp: number; streak: number };
 export const AppCtx = createContext<{ meta: Meta; user: User; refreshUser: () => void; toast: (s: string) => void }>(null as any);

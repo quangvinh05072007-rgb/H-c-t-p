@@ -156,11 +156,7 @@ export function ImportPage() {
       if (!blob) return;
       e.preventDefault();
 
-      if (meta.aiEnabled) {
-        const ext = blob.type.split('/')[1] || 'png';
-        const file = new File([blob], `anh-dan-${Date.now()}.${ext}`, { type: blob.type });
-        await parseFiles([file]);
-      } else {
+      {
         // Upload image directly into an editable draft question card with [[img:ID]]
         setBusy(true);
         try {
@@ -171,7 +167,7 @@ export function ImportPage() {
             num: 1,
             part: 'I',
             type: 'mcq',
-            stem: `[[img:${uploaded.id}]]\n(Nhập đề bài hoặc chạy OCR công thức nếu có)`,
+            stem: `[[img:${uploaded.id}]]\n(Gõ lại nội dung đề, giữ ảnh gốc để đối chiếu)`,
             sourceStem: `[[img:${uploaded.id}]]`,
             options: ['', '', '', ''],
             answer: null,
@@ -197,7 +193,7 @@ export function ImportPage() {
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [result, mode, meta.aiEnabled]);
+  }, [result, mode]);
 
   const loadKeyFile = async (file: File) => {
     if (!result) return;
@@ -629,7 +625,7 @@ export function ImportPage() {
                   {busy ? 'Đang đưa file vào hàng đợi…' : 'Kéo thả tới 10 file vào đây hoặc bấm để chọn'}
                 </div>
                 <div className="small muted">
-                  Hỗ trợ Word (.docx giữ công thức), PDF chữ hoặc PDF scan{meta.aiEnabled ? ' (Gemini Multimodal AI bóc tách LaTeX)' : ' (OCR cục bộ)'}, Excel/CSV, văn bản và ảnh chụp màn hình.
+                  Hỗ trợ gói nhập chuẩn (.json/.zip), Word (.docx giữ công thức), PDF có chữ, Excel/CSV và văn bản. Ảnh hoặc PDF scan: xử lý bên ngoài thành gói nhập rồi đưa vào.
                 </div>
               </label>
 
@@ -643,11 +639,6 @@ export function ImportPage() {
                 >
                   Tải file Excel/CSV mẫu
                 </button>
-                {!meta.aiEnabled && (
-                  <span className="tiny muted">
-                    PDF scan được OCR trên máy. Ảnh dán trực tiếp được giữ nguyên ảnh gốc để chỉnh sửa ngay.
-                  </span>
-                )}
               </div>
             </div>
           ) : (
