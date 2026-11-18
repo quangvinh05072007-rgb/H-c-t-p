@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { post } from '../../api';
 import { MathText } from '../../ui/MathText';
-import { ErrorBox, go, Icon, LevelBadge, Loading, TypeBadge, useApp } from '../../ui/kit';
+import { ErrorBox, LevelBadge, Loading, TypeBadge, useApp } from '../../ui/kit';
 
 interface StreamQuestion {
   id: number;
@@ -37,19 +37,12 @@ interface StreamHistoryItem {
   timeSpentSec: number;
 }
 
-const SKILL_TIERS = [
-  { level: 1, name: 'Khởi động', subtitle: 'Nhận biết', icon: '🥉', badgeClass: 'tier-bronze' },
-  { level: 2, name: 'Nền tảng', subtitle: 'Thông hiểu', icon: '🥈', badgeClass: 'tier-silver' },
-  { level: 3, name: 'Thành thạo', subtitle: 'Vận dụng', icon: '🥇', badgeClass: 'tier-gold' },
-  { level: 4, name: 'Bứt phá 9+', subtitle: 'Vận dụng cao', icon: '💎', badgeClass: 'tier-master' },
-];
 
 export function EndlessPracticeStream({ initialTopic }: { initialTopic?: string }) {
   const { user, toast } = useApp();
   const [mode, setMode] = useState<'adaptive' | 'weak' | 'topic'>('adaptive');
   const [selectedGrade, setSelectedGrade] = useState<number | 'all'>('all');
   const [selectedTopic, setSelectedTopic] = useState<string>(initialTopic || 'all');
-  const [targetSkillTier, setTargetSkillTier] = useState<number>(2);
 
   const [currentQuestion, setCurrentQuestion] = useState<StreamQuestion | null>(null);
   const [history, setHistory] = useState<StreamHistoryItem[]>([]);
@@ -143,15 +136,14 @@ export function EndlessPracticeStream({ initialTopic }: { initialTopic?: string 
         setSessionCorrect((prev) => {
           const next = prev + 1;
           if (next % 5 === 0) {
-            toast('🌟 Xuất sắc! Bạn đã hoàn thành chuỗi 5 câu đúng liên tiếp!');
-            setTargetSkillTier((t) => Math.min(4, t + 1));
+            toast(`Đúng ${next} câu trong phiên này. Giỏi lắm!`);
           } else {
-            toast('✓ Chính xác! Tiếp tục giữ vững phong độ nhé.');
+            toast('Chính xác!');
           }
           return next;
         });
       } else {
-        toast('Xem chẩn đoán phương pháp giải bên dưới để khắc phục lỗ hổng!');
+        toast('Chưa đúng. Xem lời giải bên dưới.');
       }
 
       setAnsweredIds((prev) => [...prev, currentQuestion.id]);
@@ -171,129 +163,44 @@ export function EndlessPracticeStream({ initialTopic }: { initialTopic?: string 
     }
   };
 
-  const currentTier = SKILL_TIERS.find((t) => t.level === targetSkillTier) || SKILL_TIERS[1];
-  const questProgressInTier = sessionCorrect % 5;
 
   return (
-    <div className="adaptive-quest-view stack" style={{ gap: 20 }}>
-      {/* 1. Header: Adaptive Quest Level & Milestones */}
-      <div className="quest-hero-banner card shadow">
-        <div className="quest-hero-top">
-          <div className="quest-hero-identity">
-            <div className="quest-hero-kicker">
-              <span className="quest-live-dot" aria-hidden="true" />
-              <span>Lộ trình Thích ứng Thông minh</span>
-              <span className="academic-sep" aria-hidden="true">·</span>
-              <span>Toán THPT</span>
-            </div>
-            <h1 className="quest-hero-title">Nhiệm Vụ Thích Ứng (Adaptive Quest)</h1>
-            <p className="quest-hero-desc">
-              Hệ thống tự động phân loại mức độ tư duy, chẩn đoán lỗ hổng kiến thức và điều chỉnh độ khó theo thời gian thực.
-            </p>
-          </div>
-
-          <div className="quest-stats-cluster">
-            <div className="quest-stat-pill">
-              <span className="quest-pill-icon" aria-hidden="true">🔥</span>
-              <div className="quest-pill-data">
-                <span className="quest-pill-label">Chuỗi ngày</span>
-                <span className="quest-pill-val tabular-nums">{userStreak} ngày</span>
-              </div>
-            </div>
-            <div className="quest-stat-pill">
-              <span className="quest-pill-icon" aria-hidden="true">📝</span>
-              <div className="quest-pill-data">
-                <span className="quest-pill-label">Đã giải</span>
-                <span className="quest-pill-val text-primary tabular-nums">{sessionCorrect}/{sessionTotal} câu</span>
-              </div>
-            </div>
-            <div className="quest-stat-pill">
-              <span className="quest-pill-icon" aria-hidden="true">🎯</span>
-              <div className="quest-pill-data">
-                <span className="quest-pill-label">Độ chính xác</span>
-                <span className="quest-pill-val text-good tabular-nums">
-                  {sessionTotal > 0 ? `${Math.round((sessionCorrect / sessionTotal) * 100)}%` : '100%'}
-                </span>
-              </div>
-            </div>
-          </div>
+    <div className="su-page" style={{ maxWidth: 860 }}>
+      <header className="su-head">
+        <div>
+          <h1>Luyện liên tục</h1>
+          <p className="su-sub">Làm từng câu, chấm ngay. Câu tiếp theo dựa trên kết quả và chuyên đề em còn yếu.</p>
         </div>
-
-        {/* 4 Skill Tiers Selector */}
-        <div className="quest-tiers-selector" role="tablist" aria-label="Mức độ kỹ năng">
-          {SKILL_TIERS.map((tier) => {
-            const isSelected = targetSkillTier === tier.level;
-            return (
-              <button
-                key={tier.level}
-                type="button"
-                role="tab"
-                aria-selected={isSelected}
-                className={`quest-tier-card ${tier.badgeClass} ${isSelected ? 'is-active' : ''}`}
-                onClick={() => setTargetSkillTier(tier.level)}
-              >
-                <div className="tier-card-header">
-                  <span className="tier-card-icon" aria-hidden="true">{tier.icon}</span>
-                </div>
-                <div className="tier-card-title">{tier.name}</div>
-                <div className="tier-card-sub">{tier.subtitle}</div>
-              </button>
-            );
-          })}
+        <div className="su-stats">
+          <span className="su-stat">Đã làm <b>{sessionTotal}</b> câu</span>
+          <span className="su-stat is-good">Đúng <b>{sessionCorrect}</b></span>
+          {sessionTotal > 0 && <span className="su-stat">Chính xác <b>{Math.round((sessionCorrect / sessionTotal) * 100)}%</b></span>}
+          <span className={`su-stat ${userStreak > 0 ? 'is-warn' : ''}`}>Chuỗi <b>{userStreak}</b> ngày</span>
         </div>
+      </header>
 
-        {/* Quest Milestone Progress Bar */}
-        <div className="quest-milestone-strip">
-          <div className="quest-milestone-text">
-            <span>Tiến độ mức độ: <strong>{questProgressInTier}/5 câu đúng</strong> ở mức {currentTier.name} ({currentTier.subtitle})</span>
-            <span className="quest-total-done tabular-nums">Đã giải {sessionTotal} câu trong phiên</span>
-          </div>
-          <div className="quest-milestone-track" aria-hidden="true">
-            <span style={{ width: `${(questProgressInTier / 5) * 100}%` }} />
-          </div>
+      <div className="su-filterbar">
+        <div className="su-pills" role="group" aria-label="Cách chọn câu">
+          <button type="button" className={`su-pill ${mode === 'adaptive' ? 'on' : ''}`} aria-pressed={mode === 'adaptive'} onClick={() => setMode('adaptive')}>
+            Theo năng lực
+          </button>
+          <button type="button" className={`su-pill ${mode === 'weak' ? 'on' : ''}`} aria-pressed={mode === 'weak'} onClick={() => setMode('weak')}>
+            Chữa điểm yếu
+          </button>
         </div>
-
-        {/* Quest Filter Bar */}
-        <div className="quest-filter-bar">
-          <div className="quest-filter-modes">
-            <button
-              type="button"
-              className={`quest-filter-btn ${mode === 'adaptive' ? 'active' : ''}`}
-              onClick={() => setMode('adaptive')}
-            >
-              🎯 Thích ứng AI
-            </button>
-            <button
-              type="button"
-              className={`quest-filter-btn ${mode === 'weak' ? 'active' : ''}`}
-              onClick={() => setMode('weak')}
-            >
-              🩸 Chữa điểm yếu
-            </button>
-          </div>
-
-          <div className="quest-filter-selects">
-            <select
-              value={selectedGrade}
-              onChange={(e) => setSelectedGrade(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-              className="quest-select"
-              aria-label="Chọn khối lớp"
-            >
-              <option value="all">Tất cả khối lớp</option>
-              <option value="12">Lớp 12 (Trọng tâm tốt nghiệp)</option>
-              <option value="11">Lớp 11</option>
-              <option value="10">Lớp 10</option>
-            </select>
-
-            <button
-              type="button"
-              className="btn ghost sm"
-              onClick={() => go('/tu-hoc')}
-            >
-              <Icon name="map" />
-              <span>Xem Cây kỹ năng →</span>
-            </button>
-          </div>
+        <span className="su-grow" />
+        <div className="su-filter-tools">
+          <select
+            className="su-select"
+            value={selectedGrade}
+            onChange={(e) => setSelectedGrade(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+            aria-label="Chọn khối lớp"
+          >
+            <option value="all">Mọi khối</option>
+            <option value="12">Lớp 12</option>
+            <option value="11">Lớp 11</option>
+            <option value="10">Lớp 10</option>
+          </select>
         </div>
       </div>
 
@@ -312,7 +219,7 @@ export function EndlessPracticeStream({ initialTopic }: { initialTopic?: string 
             </div>
             <div className="row" style={{ gap: 6 }}>
               <span className={`badge ${item.result.correct ? 'green' : 'red'}`}>
-                {item.result.correct ? '✓ Chính xác' : '✕ Chưa chính xác'}
+                {item.result.correct ? 'Đúng' : 'Chưa đúng'}
               </span>
               <span className="tiny muted">{item.timeSpentSec}s</span>
             </div>
@@ -325,7 +232,7 @@ export function EndlessPracticeStream({ initialTopic }: { initialTopic?: string 
               <summary className="strong" style={{ cursor: 'pointer', color: 'var(--primary)' }}>
                 Xem lại lời giải chi tiết
               </summary>
-              <div className="feedback-box" style={{ marginTop: 8, background: '#f8fafc', border: '1px solid var(--line)' }}>
+              <div className="feedback-box" style={{ marginTop: 8, background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
                 <MathText as="div" text={item.result.explanation} />
               </div>
             </details>
@@ -338,13 +245,13 @@ export function EndlessPracticeStream({ initialTopic }: { initialTopic?: string 
 
       {loadingNext ? (
         <div className="card center" style={{ padding: 40 }}>
-          <Loading text="Hệ thống thích ứng đang chọn câu hỏi tối ưu năng lực tiếp theo…" />
+          <Loading text="Đang chọn câu tiếp theo…" />
         </div>
       ) : currentQuestion ? (
         <div ref={activeCardRef} className="stream-card active card shadow">
           <div className="row between mb">
             <div className="row" style={{ gap: 8 }}>
-              <span className="badge blue strong">⚡ Nhiệm vụ #{history.length + 1}</span>
+              <span className="badge strong">Câu {history.length + 1}</span>
               <TypeBadge type={currentQuestion.type} />
               <LevelBadge level={currentQuestion.level} />
               <span className="tiny muted strong">Lớp {currentQuestion.grade}</span>
@@ -403,7 +310,7 @@ export function EndlessPracticeStream({ initialTopic }: { initialTopic?: string 
                     className="row between"
                     style={{
                       padding: '10px 14px',
-                      background: partCorrect === true ? '#f0fdf4' : partCorrect === false ? '#fef2f2' : 'var(--surface-subtle)',
+                      background: partCorrect === true ? 'var(--good-soft)' : partCorrect === false ? 'var(--bad-soft)' : 'var(--surface-2)',
                       border: '1px solid var(--line)',
                       borderRadius: 8,
                       alignItems: 'center',
@@ -471,7 +378,7 @@ export function EndlessPracticeStream({ initialTopic }: { initialTopic?: string 
               {currentResult && (
                 <div className="row" style={{ gap: 10, alignItems: 'center' }}>
                   <span className={`badge big ${currentResult.correct ? 'green' : 'red'}`}>
-                    {currentResult.correct ? '✓ Trả lời chính xác' : '✕ Chưa chính xác'}
+                    {currentResult.correct ? 'Đúng' : 'Chưa đúng'}
                   </span>
                   {currentResult.diagnosis?.error && (
                     <span className="tiny muted">Lỗi: {currentResult.diagnosis.error}</span>
@@ -488,7 +395,7 @@ export function EndlessPracticeStream({ initialTopic }: { initialTopic?: string 
                   disabled={checking}
                   onClick={handleCheck}
                 >
-                  {checking ? 'Đang chấm điểm…' : 'Kiểm tra kết quả →'}
+                  {checking ? 'Đang chấm…' : 'Kiểm tra'}
                 </button>
               ) : (
                 <button
@@ -496,7 +403,7 @@ export function EndlessPracticeStream({ initialTopic }: { initialTopic?: string 
                   className="btn primary big"
                   onClick={() => fetchNextQuestion()}
                 >
-                  Chinh phục câu tiếp theo ⚡
+                  Câu tiếp theo →
                 </button>
               )}
             </div>
@@ -504,9 +411,9 @@ export function EndlessPracticeStream({ initialTopic }: { initialTopic?: string 
 
           {/* Detailed Explanation Drawer */}
           {currentResult?.explanation && (
-            <div className="feedback-box mt" style={{ marginTop: 18, background: '#f8fafc', border: '1px solid var(--line)', borderRadius: 10, padding: 16 }}>
+            <div className="feedback-box mt" style={{ marginTop: 18, background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 10, padding: 16 }}>
               <div className="strong" style={{ color: 'var(--primary)', marginBottom: 8 }}>
-                💡 Hướng dẫn giải chi tiết & Phương pháp tư duy:
+                Lời giải
               </div>
               <MathText as="div" text={currentResult.explanation} />
               {currentResult.diagnosis?.hint && (
