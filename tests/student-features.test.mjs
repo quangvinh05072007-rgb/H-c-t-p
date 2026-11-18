@@ -73,7 +73,7 @@ test('Giáo viên tạo lớp có mã tham gia; Học sinh dùng mã tham gia l�
   assert.equal(myClass.data.class.code, created.data.code);
 });
 
-test('Học sinh xem danh mục tự luyện đề các môn và bắt đầu luyện đề', async () => {
+test('Học sinh xem danh mục đề tự luyện Toán và bắt đầu luyện đề', async () => {
   const student = client();
   const sLogin = await student('POST', '/api/login', { username: 'hs.chau.tb', password: SAMPLE_PASSWORD });
   assert.equal(sLogin.status, 200);
@@ -82,7 +82,7 @@ test('Học sinh xem danh mục tự luyện đề các môn và bắt đầu lu
   assert.equal(cat.status, 200);
   assert.ok(cat.data.exams.length >= 4);
 
-  // Có các môn đa dạng (Toán, Vật lí, Hóa học...)
+  // App chỉ có môn Toán
   const subjects = cat.data.exams.map((e) => e.subject);
   assert.ok(subjects.includes('Toán'));
 

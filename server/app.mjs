@@ -2992,7 +2992,7 @@ export function createApp(config = {}) {
 
   // ---- tự luyện đề (kho đề khảo sát năng lực 2026 đa môn phong phú) ----
   route('GET', '/api/student/practice-exams', ['student'], ({ user }) => {
-    let rows = db.all(
+    const rows = db.all(
       `SELECT e.id, e.title, e.duration_min, e.blueprint_json, e.items_json, e.variants_json, e.dept, e.created_at, u.display_name author
        FROM exams e
        LEFT JOIN users u ON u.id = e.created_by
@@ -3001,41 +3001,6 @@ export function createApp(config = {}) {
       user.school_id,
     );
 
-    // Tự động bổ sung kho đề mẫu đa dạng nếu trường hiện có ít hơn 11 đề
-    if (rows.length < 11) {
-      const pool = db.all("SELECT id, type, topic, level, status FROM questions WHERE school_id = ? AND status = 'approved'", user.school_id);
-      const qmap = Object.fromEntries(db.all('SELECT * FROM questions WHERE school_id = ?', user.school_id).map((r) => [r.id, toQuestion(r)]));
-      const teacherId = db.get("SELECT id FROM users WHERE school_id = ? AND role = 'teacher' LIMIT 1", user.school_id)?.id ?? user.id;
-      const extraSpecs = [
-        { title: 'Đề Thi Thử Tốt Nghiệp THPT 2026 – Sở GD&ĐT Hà Nội (Lần 1)', dept: 'Toán', durationMin: 90, counts: { mcq: 12, tf: 4, short: 6 } },
-        { title: 'Đề Thi Đánh Giá Năng Lực & Tư Duy – Phần Tư Duy Toán Học', dept: 'Toán', durationMin: 60, counts: { mcq: 10, tf: 3, short: 5 } },
-        { title: 'Đề Thi Thử Chuyên Khoa Học Tự Nhiên – Khảo Sát Hàm Số & Tích Phân', dept: 'Toán', durationMin: 90, counts: { mcq: 12, tf: 4, short: 6 } },
-        { title: 'Đề Thực Chiến Vật Lí 12 – Điện Từ Trường & Vật Lí Hạt Nhân (Cấu trúc 2026)', dept: 'Vật lí', durationMin: 50, counts: { mcq: 8, tf: 2, short: 4 } },
-        { title: 'Đề Thi Thử Hóa Học 12 – Tổng Ôn Hữu Cơ & Động Học Phản Ứng', dept: 'Hóa học', durationMin: 50, counts: { mcq: 8, tf: 2, short: 4 } },
-        { title: 'Đề Luyện Tốc Độ 30 Phút: Xác Suất Có Điều Kiện & Công Thức Bayes', dept: 'Toán', durationMin: 30, counts: { mcq: 6, tf: 2, short: 3 } },
-      ];
-      const existingTitles = new Set(rows.map((r) => r.title));
-      for (const sp of extraSpecs) {
-        if (!existingTitles.has(sp.title) && pool.length >= 6) {
-          const g = generateExam(pool, { counts: sp.counts, levels: { 1: 35, 2: 40, 3: 25 }, topics: [], durationMin: sp.durationMin, seed: sp.title });
-          const items = g.items.map(({ qid, type, topic, level }) => ({ qid, type, topic, level }));
-          const snap = Object.fromEntries(items.map((x) => [x.qid, qmap[x.qid]]));
-          const variants = [0, 1, 2, 3].map((i) => ({ code: String(101 + i), seed: `${sp.title}-${i}` }));
-          db.run(
-            'INSERT INTO exams (school_id, title, blueprint_json, items_json, duration_min, variants_json, snapshot_json, created_by, created_at, dept, visibility) VALUES (?,?,?,?,?,?,?,?,?,?,\'school\')',
-            user.school_id, sp.title, JSON.stringify({ counts: sp.counts, durationMin: sp.durationMin }), JSON.stringify(items), sp.durationMin, JSON.stringify(variants), JSON.stringify(snap), teacherId, now(), sp.dept
-          );
-        }
-      }
-      rows = db.all(
-        `SELECT e.id, e.title, e.duration_min, e.blueprint_json, e.items_json, e.variants_json, e.dept, e.created_at, u.display_name author
-         FROM exams e
-         LEFT JOIN users u ON u.id = e.created_by
-         WHERE e.school_id = ? AND (e.visibility = 'school' OR e.visibility IS NULL)
-         ORDER BY e.id DESC`,
-        user.school_id,
-      );
-    }
 
     const attempts = db.all(
       `SELECT id, title, score10, status, started_at, submitted_at

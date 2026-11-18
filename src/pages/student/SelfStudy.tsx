@@ -17,14 +17,8 @@ import {
 } from '../../ui/selfstudy/TopicStudyHelpers';
 import { StudyTopic, TopicStudyWorkspace } from './TopicStudyWorkspace';
 
-const SUBJECTS = [
-  { id: 'math', name: 'Toán học' },
-  { id: 'physics', name: 'Vật lí' },
-  { id: 'chemistry', name: 'Hóa học' },
-  { id: 'biology', name: 'Sinh học' },
-  { id: 'english', name: 'Tiếng Anh' },
-  { id: 'history', name: 'Lịch sử' },
-];
+// App chỉ dạy Toán THPT.
+const SUBJECTS = [{ id: 'math', name: 'Toán học' }];
 
 const DOMAINS: Record<'algebra' | 'geometry' | 'statistics', string> = {
   algebra: 'Đại số & Giải tích',
@@ -72,49 +66,7 @@ export function SelfStudy() {
   const [activeTopicCode, setActiveTopicCode] = useState<string | null>(null);
   const [lastStudied, setLastStudied] = useState(() => readLastStudiedTopic(user.id));
 
-  const otherTopicsBySubject: Record<string, StudyTopic[]> = useMemo(
-    () => ({
-      physics: [
-        { code: 'LY12.KHI', grade: 12, name: 'Vật lí nhiệt và Khí lí tưởng' },
-        { code: 'LY12.TU', grade: 12, name: 'Từ trường và Cảm ứng điện từ' },
-        { code: 'LY12.HATNHAN', grade: 12, name: 'Vật lí hạt nhân và Năng lượng' },
-        { code: 'LY11.DAODONG', grade: 11, name: 'Dao động điều hòa và Sóng cơ' },
-        { code: 'LY11.DIENTRUONG', grade: 11, name: 'Điện trường và Dòng điện không đổi' },
-        { code: 'LY10.DONGHOC', grade: 10, name: 'Động học và Động lực học chất điểm' },
-        { code: 'LY10.NANGLUONG', grade: 10, name: 'Năng lượng, Công và Công suất' },
-      ],
-      chemistry: [
-        { code: 'HOA12.ESTER', grade: 12, name: 'Este – Lipit và Chất giặt rửa' },
-        { code: 'HOA12.CARBO', grade: 12, name: 'Cacbohiđrat (Glucose, Saccarozo, Tinh bột)' },
-        { code: 'HOA12.AMIN', grade: 12, name: 'Amin, Amino Axit và Protein' },
-        { code: 'HOA12.PIN', grade: 12, name: 'Pin điện và Điện phân' },
-        { code: 'HOA11.CANDANG', grade: 11, name: 'Cân bằng hóa học và Sự điện li' },
-        { code: 'HOA11.NITRO', grade: 11, name: 'Nitơ và Hợp chất của Nitơ' },
-        { code: 'HOA10.NT', grade: 10, name: 'Cấu tạo nguyên tử và Bảng tuần hoàn' },
-        { code: 'HOA10.OXH', grade: 10, name: 'Phản ứng Oxi hóa – Khử' },
-      ],
-      biology: [
-        { code: 'SINH12.ADN', grade: 12, name: 'Cơ chế di truyền và Biến dị phân tử' },
-        { code: 'SINH12.QLLK', grade: 12, name: 'Quy luật di truyền và Liên kết gen' },
-        { code: 'SINH12.SINHTHAI', grade: 12, name: 'Hệ sinh thái và Sinh quyển' },
-        { code: 'SINH11.CHUYENHOA', grade: 11, name: 'Chuyển hóa vật chất và Năng lượng ở sinh vật' },
-        { code: 'SINH10.TEBAO', grade: 10, name: 'Sinh học tế bào và Vi sinh vật' },
-      ],
-      english: [
-        { code: 'ENG12.TENSES', grade: 12, name: 'Ngữ pháp nâng cao: Đảo ngữ & Câu điều kiện' },
-        { code: 'ENG12.READING', grade: 12, name: 'Kỹ năng đọc hiểu & Tìm ý chính bài đọc' },
-        { code: 'ENG11.PHRASAL', grade: 11, name: 'Cụm động từ (Phrasal Verbs) & Thành ngữ' },
-        { code: 'ENG10.VOCAB', grade: 10, name: 'Từ vựng cốt lõi & Ngữ âm (Trọng âm, Nguyên âm)' },
-      ],
-      history: [
-        { code: 'SU12.VN45_75', grade: 12, name: 'Lịch sử Việt Nam giai đoạn 1945 – 1975' },
-        { code: 'SU12.DOIMOI', grade: 12, name: 'Việt Nam thời kỳ Đổi mới và Hội nhập' },
-        { code: 'SU11.TGHIENDAI', grade: 11, name: 'Lịch sử thế giới hiện đại giữa hai cuộc chiến tranh' },
-        { code: 'SU10.VANMINH', grade: 10, name: 'Các nền văn minh cổ đại và trung đại' },
-      ],
-    }),
-    [],
-  );
+  const otherTopicsBySubject: Record<string, StudyTopic[]> = useMemo(() => ({}), []);
 
   const mastery = useMemo(() => {
     return Object.fromEntries((data?.mastery ?? []).map((m: any) => [m.topic, m]));
@@ -309,7 +261,7 @@ export function SelfStudy() {
         <div style={{ minWidth: 0 }}>
           <h1>Tự học</h1>
           <p className="su-sub">
-            {currentSubj.name} · Lớp {selectedGrade} · {stats.mastered}/{stats.total} chủ đề thành thạo
+            Toán · Lớp {selectedGrade} · {stats.mastered}/{stats.total} chủ đề thành thạo
           </p>
         </div>
         {suggestedSpotlight && (
@@ -323,29 +275,8 @@ export function SelfStudy() {
         )}
       </header>
 
-      {/* Một hàng duy nhất: môn học (chip) + khối, trạng thái (ô chọn nhỏ) + ghép chủ đề */}
+      {/* Một hàng: khối, trạng thái (ô chọn nhỏ) + ghép chủ đề */}
       <div className="su-filterbar">
-        <div className="su-pills" role="tablist" aria-label="Chọn môn học">
-          {SUBJECTS.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              role="tab"
-              aria-selected={selectedSubject === s.id}
-              className={`su-pill ${selectedSubject === s.id ? 'on' : ''}`}
-              onClick={() => {
-                setSelectedSubject(s.id);
-                setPicked([]);
-                setMultiPickMode(false);
-                setSearchQuery('');
-                setStatusFilter('all');
-                setActiveTopicCode(null);
-              }}
-            >
-              {s.name}
-            </button>
-          ))}
-        </div>
         <span className="su-grow" />
         <div className="su-filter-tools">
           <select

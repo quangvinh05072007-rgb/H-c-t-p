@@ -1,15 +1,10 @@
 import {
   AlertTriangle,
-  Atom,
   BarChart3,
   BookOpen,
   Calculator,
   CheckCircle2,
   Compass,
-  FlaskConical,
-  Landmark,
-  Languages,
-  Leaf,
   TrendingUp,
 } from 'lucide-react';
 
@@ -82,11 +77,6 @@ export function TopicGlyph({
   domain?: 'algebra' | 'geometry' | 'statistics';
   size?: number;
 }) {
-  if (subjectId === 'physics') return <Atom size={size} aria-hidden="true" />;
-  if (subjectId === 'chemistry') return <FlaskConical size={size} aria-hidden="true" />;
-  if (subjectId === 'biology') return <Leaf size={size} aria-hidden="true" />;
-  if (subjectId === 'english') return <Languages size={size} aria-hidden="true" />;
-  if (subjectId === 'history') return <Landmark size={size} aria-hidden="true" />;
   if (domain === 'geometry') return <Compass size={size} aria-hidden="true" />;
   if (domain === 'statistics') return <BarChart3 size={size} aria-hidden="true" />;
   return <Calculator size={size} aria-hidden="true" />;

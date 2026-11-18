@@ -254,11 +254,9 @@ export function seedSample(app) {
   const ex4 = makeExam('Bài Tập Về Nhà Tuần 3: Ôn Tập Khảo Sát Hàm Số & Oxyz', { counts: { mcq: 5, tf: 1, short: 2 }, levels: { 1: 50, 2: 30, 3: 20 }, topics: ['T11.MULOG', 'T11.DAOHAM'], durationMin: 30 }, minh, t0 - DAY, 'Toán');
   assign(ex4, ids.classes['11B1'].id, 'Bài Tập Về Nhà Tuần 3: Ôn Tập Khảo Sát Hàm Số & Oxyz', 'homework', t0 - 3600000, t0 + 7 * DAY, 30, minh, m11b1_1);
 
-  // Đề tự luyện các môn (khảo sát năng lực chuẩn 2026)
-  makeExam('Đề Khảo Sát Năng Lực Vật Lí 12 – Khí Lí Tưởng & Dao Động', { counts: { mcq: 4, tf: 1, short: 1 }, levels: { 1: 50, 2: 50 }, topics: [], durationMin: 50 }, minh, t0 - 2 * DAY, 'Vật lí');
-  makeExam('Đề Thi Thử Tốt Nghiệp THPT Hóa Học – Ester, Lipid & Pin Điện', { counts: { mcq: 4, tf: 1, short: 1 }, levels: { 1: 50, 2: 50 }, topics: [], durationMin: 50 }, lan, t0 - 2 * DAY, 'Hóa học');
-  makeExam('Đề Luyện Thi Sinh Học 12 – Di Truyền Phân Tử & Mã Di Truyền', { counts: { mcq: 4, tf: 1, short: 1 }, levels: { 1: 50, 2: 50 }, topics: [], durationMin: 50 }, lan, t0 - 3 * DAY, 'Sinh học');
-  makeExam('Đề Khảo Sát Tiếng Anh THPT – Chuyên Đề Đảo Ngữ & Ngữ Pháp', { counts: { mcq: 4, tf: 1, short: 1 }, levels: { 1: 50, 2: 50 }, topics: [], durationMin: 50 }, minh, t0 - 3 * DAY, 'Tiếng Anh');
+  // Đề tự luyện Toán cho học sinh (dữ liệu mẫu)
+  makeExam('Đề luyện tổng hợp Toán – Đề 1 (mô phỏng)', { counts: { mcq: 6, tf: 2, short: 2 }, levels: { 1: 40, 2: 40, 3: 20 }, topics: [], durationMin: 30 }, minh, t0 - 2 * DAY);
+  makeExam('Đề luyện tổng hợp Toán – Đề 2 (mô phỏng)', { counts: { mcq: 6, tf: 2, short: 2 }, levels: { 1: 30, 2: 40, 3: 30 }, topics: [], durationMin: 30 }, lan, t0 - 3 * DAY);
   // Lịch sử mô phỏng không tính vào chuỗi ngày học của hôm nay.
   db.run("UPDATE users SET streak = 0, last_active_day = NULL WHERE role = 'student'");
   db.run('INSERT INTO audit_log (school_id, user_id, action, detail, at) VALUES (?,?,?,?,?)', ids.school, null, 'seed', 'Tạo trường mẫu và lịch sử mô phỏng', t0);

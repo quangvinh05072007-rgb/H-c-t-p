@@ -31,23 +31,8 @@ type PracticeResponse = {
   completedCount: number;
 };
 
-// Mỗi môn một chấm màu nhỏ (dùng token chung), không tô cả thẻ.
-const SUBJECT_DOT: Record<string, string> = {
-  'Toán': 'var(--primary)',
-  'Vật lí': 'var(--cyan)',
-  'Hóa học': 'var(--accent)',
-  'Sinh học': 'var(--good)',
-  'Tiếng Anh': 'var(--violet)',
-};
-
-function SubjectTag({ subject, grade }: { subject: string; grade?: number | null }) {
-  return (
-    <span className="su-chip">
-      <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 99, background: SUBJECT_DOT[subject] ?? 'var(--ink-3)' }} />
-      {subject}
-      {grade ? ` · Lớp ${grade}` : ''}
-    </span>
-  );
+function GradeTag({ grade }: { grade?: number | null }) {
+  return grade ? <span className="su-chip">Lớp {grade}</span> : null;
 }
 
 export function PracticeHub() {
@@ -217,21 +202,6 @@ export function PracticeHub() {
         <>
           {/* Một hàng lọc: môn học + tìm kiếm + nút mở bộ lọc thêm */}
           <div className="su-filterbar">
-            <div className="su-pills" role="group" aria-label="Lọc theo môn">
-              {subjects.map((sub) => (
-                <button
-                  key={sub}
-                  type="button"
-                  className={`su-pill ${selectedSubject === sub ? 'on' : ''}`}
-                  onClick={() => {
-                    setSelectedSubject(sub);
-                    setSelectedFocus('all');
-                  }}
-                >
-                  {sub === 'all' ? 'Tất cả' : sub}
-                </button>
-              ))}
-            </div>
             <span className="su-grow" />
             <label style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <Search size={14} aria-hidden="true" style={{ position: 'absolute', left: 10, color: 'var(--ink-3)' }} />
@@ -314,7 +284,7 @@ export function PracticeHub() {
                     <div className="su-row-main">
                       <div className="su-row-title">{exam.title}</div>
                       <div className="su-row-meta">
-                        <SubjectTag subject={exam.subject} grade={exam.grade} />
+                        <GradeTag grade={exam.grade} />
                         {examMeta(exam)}
                       </div>
                     </div>
@@ -329,7 +299,7 @@ export function PracticeHub() {
               {filteredExams.map((exam) => (
                 <article key={exam.id} className="su-card su-exam" onClick={() => startingId === null && startExam(exam.id)}>
                   <div className="su-exam-top">
-                    <SubjectTag subject={exam.subject} grade={exam.grade} />
+                    <GradeTag grade={exam.grade} />
                     {examStatus(exam)}
                   </div>
                   <div className="su-exam-title">{exam.title}</div>
