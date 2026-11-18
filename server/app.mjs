@@ -28,6 +28,7 @@ import { isMathVerifyAvailable, verifyMathEquivalence, validateMathExpression } 
 import { findDuplicates, QuestionSearchIndex } from '../shared/duplicate-detector.mjs';
 import { isOmrAvailable, processOmrImage, generateOmrTemplateHtml } from './omr.mjs';
 import JSZip from 'jszip';
+import { parsePackage, bindImages, samplePackage } from '../shared/package.mjs';
 
 export const SAVE_GRACE_MS = 30 * 1000; // ân hạn mạng sau giờ nộp
 export const LATE_WINDOW_MS = 15 * 60 * 1000; // nhận bản đồng bộ muộn (mất mạng) để giáo viên quyết định
@@ -1043,6 +1044,140 @@ export function createApp(config = {}) {
     audit(user, 'import_save', `${ids.length} câu từ ${body.origin ?? 'văn bản'}`, ip);
     return { ids };
   });
+  // ---- GÓI NHẬP CHUẨN (.json / .zip): câu hỏi + đề + bài học, xử lý bên ngoài rồi đưa vào ----
+  const IMAGE_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
+  async function readPackage(name, raw) {
+    const ext = String(name).toLowerCase().split('.').pop();
+    if (!raw?.length) fail(400, 'File gói trống.');
+    if (raw.length > 50 * 1024 * 1024) fail(400, 'Gói tối đa 50 MB.');
+    if (ext === 'json') return { json: raw.toString('utf8'), images: {} };
+    if (ext !== 'zip') fail(400, 'Gói nhập phải là file .json hoặc .zip.');
+    let zip;
+    try {
+      zip = await JSZip.loadAsync(raw);
+    } catch {
+      fail(400, 'File .zip bị hỏng hoặc không đọc được.');
+    }
+    const files = Object.values(zip.files).filter((f) => !f.dir && !/(^|\/)(__MACOSX|\.)/.test(f.name));
+    const jsonFile = files.find((f) => /(^|\/)(goi|package)\.json$/i.test(f.name)) ?? files.find((f) => /\.json$/i.test(f.name));
+    if (!jsonFile) fail(400, 'Trong .zip cần có một file .json (nên đặt tên goi.json).');
+    const base = jsonFile.name.includes('/') ? jsonFile.name.slice(0, jsonFile.name.lastIndexOf('/') + 1) : '';
+    const images = {};
+    for (const f of files) {
+      const fext = f.name.toLowerCase().split('.').pop();
+      if (!IMAGE_MIME[fext]) continue;
+      const data = await f.async('nodebuffer');
+      if (data.length > 5 * 1024 * 1024) continue;
+      const rel = f.name.startsWith(base) ? f.name.slice(base.length) : f.name;
+      images[rel] = { data, mime: IMAGE_MIME[fext] };
+      const bare = rel.split('/').pop();
+      if (!images[bare]) images[bare] = images[rel];
+    }
+    return { json: await jsonFile.async('string'), images };
+  }
+  function packageSummary(p) {
+    return {
+      source: p.source,
+      questions: p.questions.length,
+      byType: p.questions.reduce((acc, q) => ((acc[q.type] = (acc[q.type] ?? 0) + 1), acc), {}),
+      exams: p.exams.map((e) => ({ title: e.title, count: e.keys.length, durationMin: e.durationMin })),
+      lessons: p.lessons.map((l) => ({ topic: l.topic, name: TOPIC_BY_CODE[l.topic]?.name ?? l.topic })),
+      errors: p.errors,
+      warnings: p.warnings,
+    };
+  }
+  route('GET', '/api/import/package-sample.json', STAFF, () => ({
+    __file: { name: 'goi-nhap-mau.json', type: 'application/json; charset=utf-8', data: Buffer.from(JSON.stringify(samplePackage(), null, 2), 'utf8') },
+  }));
+  route('POST', '/api/import/package', STAFF, async ({ user, raw, query, ip }) => {
+    const filename = String(query.filename ?? 'goi.json');
+    const { json, images } = await readPackage(filename, raw);
+    const p = parsePackage(json, new Set(Object.keys(images)));
+    const dryRun = query.dryRun === '1' || query.dryRun === 'true';
+    if (dryRun) return { dryRun: true, ...packageSummary(p) };
+    if (!p.questions.length && !p.lessons.length) fail(400, p.errors[0]?.message ?? 'Gói không có mục hợp lệ để nhập.');
+
+    const wantApprove = query.approve === '1' || query.approve === 'true';
+    const canApprove = wantApprove && reviewPolicy(user.school_id) !== 'double';
+    const origin = `Gói nhập: ${p.source || filename}`.slice(0, 200);
+    const warnings = [...p.warnings];
+    if (wantApprove && !canApprove) warnings.push('Trường đang dùng chính sách hai người duyệt: câu được lưu ở dạng nháp chờ duyệt.');
+
+    const result = db.tx(() => {
+      // Hình: chỉ lưu hình được nhắc tới
+      const used = new Set();
+      const collect = (s) => { for (const m of String(s ?? '').matchAll(/\[\[image:([^\]\n]+)\]\]/g)) used.add(m[1].trim()); };
+      for (const q of p.questions) [q.stem, q.explanation, ...q.options].forEach(collect);
+      for (const l of p.lessons) JSON.stringify(l.entry).replace(/\[\[image:([^\]\n]+)\]\]/g, (m, n) => (used.add(n.trim()), m));
+      const idByName = {};
+      for (const name of used) if (images[name]) idByName[name] = saveImage(user, images[name]);
+
+      // Câu hỏi: bỏ câu trùng hệt (cùng loại, cùng đề) đã có trong ngân hàng của trường
+      const idByKey = {};
+      let skipped = 0, approved = 0, drafts = 0;
+      for (const q of p.questions) {
+        const stem = bindImages(q.stem, idByName);
+        const dup = db.get("SELECT id, status FROM questions WHERE school_id = ? AND type = ? AND stem = ? AND status != 'archived' LIMIT 1", user.school_id, q.type, stem);
+        if (dup) {
+          idByKey[q.key] = dup.id;
+          skipped++;
+          continue;
+        }
+        const status = canApprove ? 'approved' : 'draft';
+        const id = insertQuestion(user, {
+          type: q.type,
+          stem,
+          options: q.options.map((o) => bindImages(o, idByName)),
+          answer: q.answer,
+          explanation: bindImages(q.explanation, idByName),
+          topic: q.topic,
+          level: q.level,
+          group_id: q.group_id,
+        }, 'imported', status, { origin });
+        idByKey[q.key] = id;
+        if (status === 'approved') approved++; else drafts++;
+      }
+
+      // Đề thi: chỉ tạo khi mọi câu đã được duyệt
+      const exams = [];
+      for (const e of p.exams) {
+        const qids = e.keys.map((k) => idByKey[k]);
+        const qmap = questionsMap(user.school_id, qids);
+        const notReady = qids.filter((id) => qmap[id]?.status !== 'approved');
+        if (notReady.length) {
+          warnings.push(`Đề "${e.title}" chưa tạo vì còn ${notReady.length} câu chưa duyệt. Duyệt câu trong Ngân hàng rồi ghép đề.`);
+          continue;
+        }
+        const norm = qids.map((qid) => ({ qid, type: qmap[qid].type, topic: qmap[qid].topic, level: qmap[qid].level, group: qmap[qid].group_id ?? null, fixedOptions: imageOptions(qmap[qid]) }));
+        const variants = makeVariants(norm, e.variants, `${user.id}-${now()}-${e.title}`);
+        const counts = norm.reduce((acc, x) => ((acc[x.type] = (acc[x.type] ?? 0) + 1), acc), { mcq: 0, tf: 0, short: 0 });
+        const r = db.run(
+          'INSERT INTO exams (school_id, title, blueprint_json, items_json, duration_min, variants_json, snapshot_json, created_by, created_at, visibility, dept) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+          user.school_id, e.title, JSON.stringify({ counts, durationMin: e.durationMin, origin }), JSON.stringify(norm), e.durationMin,
+          JSON.stringify(variants), JSON.stringify(qmap), user.id, now(), e.shareWithSchool ? 'school' : 'private', 'Toán',
+        );
+        exams.push({ id: Number(r.lastInsertRowid), title: e.title });
+      }
+
+      // Bài học: ghi đè theo chuyên đề
+      for (const l of p.lessons) {
+        const entry = JSON.parse(bindImages(JSON.stringify(l.entry), idByName));
+        db.run(
+          `INSERT INTO lessons (school_id, topic, data_json, source, updated_by, updated_at) VALUES (?,?,?,?,?,?)
+           ON CONFLICT(school_id, topic) DO UPDATE SET data_json = excluded.data_json, source = excluded.source, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+          user.school_id, l.topic, JSON.stringify(entry), origin, user.id, now(),
+        );
+      }
+      return { approved, drafts, skipped, exams, lessons: p.lessons.length, images: Object.keys(idByName).length };
+    });
+    invalidateQuestionIndex(user.school_id);
+    audit(user, 'import_package', `${origin}: ${result.approved + result.drafts} câu mới, ${result.skipped} trùng, ${result.exams.length} đề, ${result.lessons} bài học`, ip);
+    return { ...result, errors: p.errors, warnings };
+  });
+  // Bài học Tự học đã nhập (ghi đè nội dung mặc định theo chuyên đề)
+  route('GET', '/api/lessons', ['admin', 'teacher', 'student'], ({ user }) => ({
+    lessons: Object.fromEntries(db.all('SELECT topic, data_json FROM lessons WHERE school_id = ?', user.school_id).map((r) => [r.topic, r.data])),
+  }));
   route('GET', '/api/import/template.csv', STAFF, () => ({ __file: { name: 'mau-nhap-cau-hoi.csv', type: 'text/csv; charset=utf-8', data: Buffer.from(CSV_TEMPLATE, 'utf8') } }));
 
   route('POST', '/api/exams/generate', STAFF, ({ user, body }) => {
@@ -4230,7 +4365,9 @@ export function createApp(config = {}) {
       let body = {};
       if (req.method !== 'GET') {
         const bodyLimit =
-          url.pathname === '/api/import' || url.pathname === '/api/import/answers' || url.pathname === '/api/import/jobs'
+          url.pathname === '/api/import/package'
+            ? 50 * 1024 * 1024
+            : url.pathname === '/api/import' || url.pathname === '/api/import/answers' || url.pathname === '/api/import/jobs'
             ? 26 * 1024 * 1024
             : url.pathname === '/api/images' || url.pathname === '/api/omr/scan'
               ? 8 * 1024 * 1024

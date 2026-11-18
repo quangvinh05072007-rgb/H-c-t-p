@@ -134,6 +134,8 @@ export async function importFile(name, buf, options = {}) {
   } else if (ext === 'txt' || ext === 'md' || ext === 'tex') {
     parsed = parseExamText(buf.toString('utf8'));
     info.engine = 'Văn bản / LaTeX';
+  } else if (ext === 'json' || ext === 'zip') {
+    throw Object.assign(new Error('Đây là gói nhập chuẩn: hãy dùng khung "Gói nhập chuẩn" ở đầu trang Nhập đề.'), { status: 400 });
   } else if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) {
     throw Object.assign(new Error('App không tự đọc đề từ ảnh. Hãy chuyển đề sang Word (.docx) hoặc gói nhập chuẩn (.json/.zip) rồi nhập lại.'), { status: 400 });
   } else {

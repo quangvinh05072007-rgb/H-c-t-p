@@ -1,3 +1,4 @@
+import { PackageImport } from '../../ui/PackageImport';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -528,10 +529,12 @@ export function ImportPage() {
       <CreateExamActionBar active="import" classSuffix={classSuffix} />
 
       <PageHeading
-        title="Trình Nhập Đề Thông Minh"
+        title="Nhập đề"
         icon="import"
-        description="Bóc tách từ Word, PDF, Excel, ảnh chụp — đối chiếu, khử trùng và chuyển thẳng thành đề thi."
+        description="Nhập gói chuẩn đã xử lý sẵn, hoặc tách câu từ Word, PDF có chữ, Excel và văn bản rồi đối chiếu trước khi lưu."
       />
+
+      {!result && <PackageImport />}
 
       <ol className="import-steps" aria-label="Quy trình nhập đề">
         {['Chọn nguồn đề', 'Đối chiếu & Làm sạch', 'Xuất Ngân hàng / Tạo đề'].map((label, i) => {
@@ -625,7 +628,7 @@ export function ImportPage() {
                   {busy ? 'Đang đưa file vào hàng đợi…' : 'Kéo thả tới 10 file vào đây hoặc bấm để chọn'}
                 </div>
                 <div className="small muted">
-                  Hỗ trợ gói nhập chuẩn (.json/.zip), Word (.docx giữ công thức), PDF có chữ, Excel/CSV và văn bản. Ảnh hoặc PDF scan: xử lý bên ngoài thành gói nhập rồi đưa vào.
+                  Word (.docx giữ công thức), PDF có chữ, Excel/CSV và văn bản. Gói .json/.zip: dùng khung Gói nhập chuẩn phía trên.
                 </div>
               </label>
 

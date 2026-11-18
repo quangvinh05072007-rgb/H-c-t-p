@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { get, post } from '../../api';
 import { TOPIC_CURRICULUM, TopicCurriculumEntry } from '../../data/topicCurriculum';
-import { fmtDateTime, go, Loading, useApp } from '../../ui/kit';
+import { fmtDateTime, go, Loading, useApp, useAsync } from '../../ui/kit';
 import { MathText } from '../../ui/MathText';
 import { isAnswered, Item, QuestionView, Review } from '../../ui/Question';
 import {
@@ -120,7 +120,9 @@ export function TopicStudyWorkspace({
   const [sessionStats, setSessionStats] = useState({ tried: 0, correct: 0 });
 
   const isBankTopic = subjectId === 'math';
-  const curriculum = TOPIC_CURRICULUM[topic.code] as CurriculumWithExamples | undefined;
+  // Bài học đã nhập qua gói (theo trường) ưu tiên hơn nội dung mặc định trong app
+  const { data: lessonData } = useAsync(() => get<{ lessons: Record<string, CurriculumWithExamples> }>('/api/lessons').catch(() => ({ lessons: {} as Record<string, CurriculumWithExamples> })), []);
+  const curriculum = (lessonData?.lessons?.[topic.code] ?? TOPIC_CURRICULUM[topic.code]) as CurriculumWithExamples | undefined;
   const hasExamples = Boolean(curriculum?.examples && curriculum.examples.length > 0);
 
   useEffect(() => {

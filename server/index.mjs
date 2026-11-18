@@ -12,7 +12,7 @@ export function loadConfig() {
   const read = (f) => (fs.existsSync(path.join(root, f)) ? JSON.parse(fs.readFileSync(path.join(root, f), 'utf8')) : {});
   const base = read('config.json');
   const local = read('config.local.json');
-  return { ...base, ...local, ai: { ...(base.ai ?? {}), ...(local.ai ?? {}) } };
+  return { ...base, ...local };
 }
 
 function lanAddresses() {
@@ -22,9 +22,9 @@ function lanAddresses() {
     .map((a) => a.address);
 }
 
-export function startServer({ port, viteMiddleware } = {}) {
+export function startServer({ port, viteMiddleware, dataDir: dataDirOverride } = {}) {
   const config = loadConfig();
-  const dataDir = path.join(root, config.dataDir ?? 'data');
+  const dataDir = dataDirOverride ?? path.join(root, config.dataDir ?? 'data');
   const app = createApp({
     ...config,
     dbFile: path.join(dataDir, 'smartexam.db'),
@@ -45,7 +45,6 @@ export function startServer({ port, viteMiddleware } = {}) {
     console.log(`\nSmartExam AI đang chạy.`);
     console.log(`  Trên máy này:      http://localhost:${p}`);
     for (const ip of lanAddresses()) console.log(`  Máy khác cùng mạng: http://${ip}:${p}`);
-    console.log(app.ai.enabled ? `  AI: bật (${app.ai.model})` : '  AI: tắt (chưa có khóa) — mọi chức năng khác vẫn chạy.');
     if (!app.db.get('SELECT id FROM schools LIMIT 1')) console.log('  Lần đầu chạy: mở trình duyệt để thiết lập trường.');
     console.log('  Đóng cửa sổ này (hoặc Ctrl+C) để tắt.\n');
   });

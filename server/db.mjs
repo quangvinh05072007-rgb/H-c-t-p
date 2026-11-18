@@ -110,6 +110,11 @@ CREATE TABLE IF NOT EXISTS student_notes (
   note TEXT NOT NULL DEFAULT '', tag TEXT NOT NULL DEFAULT 'important', updated_at INTEGER NOT NULL,
   PRIMARY KEY (student_id, qid)
 );
+CREATE TABLE IF NOT EXISTS lessons (
+  school_id INTEGER NOT NULL, topic TEXT NOT NULL, data_json TEXT NOT NULL,
+  source TEXT, updated_by INTEGER, updated_at INTEGER NOT NULL,
+  PRIMARY KEY (school_id, topic)
+);
 CREATE TABLE IF NOT EXISTS class_modules (
   id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, class_id INTEGER NOT NULL REFERENCES classes(id),
   week_no INTEGER NOT NULL DEFAULT 1, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',

@@ -327,10 +327,6 @@ export function App() {
           ['/bai-lam/:id', ([id]) => <TeacherAttemptView key={id} id={Number(id)} />],
           ['/nguoi-dung', () => <Users />],
           ['/nhat-ky', () => <Audit />],
-          ['/tu-hoc', () => <SelfStudy />],
-          ['/luyen-tap', () => <PracticeHub />],
-          ['/luyen-vo-han', () => <EndlessPracticeStream />],
-          ['/ban-do-tri-thuc', () => <SelfStudy />],
           ['/tien-bo', () => <Classes />],
           ['/tai-khoan', () => <Account onLogout={logout} />],
         ];
