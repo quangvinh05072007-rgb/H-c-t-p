@@ -174,9 +174,9 @@ export function VariantShuffler({
     try {
       await download(
         `/api/exams/${selectedExamId}/variants-zip`,
-        `de-thi-${selectedExamId}-tron-bo-ma-de.zip`
+        `goi-in-de-${selectedExamId}.zip`
       );
-      toast('Đã tải trọn bộ các mã đề (.docx + .pdf), bảng đáp án và ma trận chéo.');
+      toast('Đã tải gói in: các mã đề, đáp án, ma trận và bản đặc tả, phiếu trả lời.');
     } catch (e: any) {
       toast(e?.message || 'Chưa tải được gói ZIP mã đề.');
     } finally {
@@ -242,9 +242,18 @@ export function VariantShuffler({
             className="btn sm"
             disabled={!selectedExamId || zipDownloading}
             onClick={handleExportZip}
-            title="Tải ZIP gồm từng mã đề .docx + .pdf riêng, file lời giải tổng hợp và ma trận đáp án"
+            title="Gói in: từng mã đề Word + PDF, đáp án và lời giải, bảng đáp án chéo, ma trận và bản đặc tả, phiếu trả lời"
           >
-            {zipDownloading ? 'Đang đóng gói…' : 'Tải trọn bộ (.zip)'}
+            {zipDownloading ? 'Đang đóng gói…' : 'Tải gói in (.zip)'}
+          </button>
+          <button
+            type="button"
+            className="btn sm"
+            disabled={!selectedExamId}
+            onClick={() => download(`/api/exams/${selectedExamId}/matrix.docx`, `ma-tran-dac-ta-${selectedExamId}.docx`).catch((e) => toast(e.message))}
+            title="Ma trận đề kiểm tra và bản đặc tả (Word)"
+          >
+            Ma trận & đặc tả
           </button>
           <button
             type="button"

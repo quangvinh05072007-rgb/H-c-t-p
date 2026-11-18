@@ -30,6 +30,7 @@ import { isOmrAvailable, processOmrImage, generateOmrTemplateHtml } from './omr.
 import JSZip from 'jszip';
 import { makeRng } from '../shared/rng.mjs';
 import { parsePackage, bindImages, samplePackage } from '../shared/package.mjs';
+import { exportMatrixDocx } from '../shared/exportMatrixDocx.mjs';
 
 export const SAVE_GRACE_MS = 30 * 1000; // ân hạn mạng sau giờ nộp
 export const LATE_WINDOW_MS = 15 * 60 * 1000; // nhận bản đồng bộ muộn (mất mạng) để giáo viên quyết định
@@ -1736,6 +1737,17 @@ export function createApp(config = {}) {
     const safe = e.title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').replace(/[^\w-]+/g, '-').slice(0, 60);
     return { __file: { name: `${safe || 'de-thi'}${reqCode ? `-ma-${reqCode}` : ''}.pdf`, type: 'application/pdf', data: buf } };
   });
+  /** Mục tiêu (yêu cầu cần đạt) theo chuyên đề từ bài học đã nhập của trường. */
+  function lessonObjectives(schoolId) {
+    return Object.fromEntries(db.all('SELECT topic, data_json FROM lessons WHERE school_id = ?', schoolId).map((r) => [r.topic, r.data?.objectives ?? []]));
+  }
+  route('GET', '/api/exams/:id/matrix.docx', STAFF, async ({ user, params, ip }) => {
+    const e = visibleExam(user, params.id);
+    const school = db.get('SELECT name FROM schools WHERE id = ?', user.school_id);
+    const data = await exportMatrixDocx({ title: e.title, school: school.name, durationMin: e.duration_min }, e.items, lessonObjectives(user.school_id));
+    audit(user, 'exam_export', `#${e.id} ma trận & bản đặc tả`, ip);
+    return { __file: { name: `ma-tran-dac-ta-${e.id}.docx`, type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', data } };
+  });
   route('GET', '/api/exams/:id/variants-zip', STAFF, async ({ user, params, ip }) => {
     const e = visibleExam(user, params.id);
     const school = db.get('SELECT name FROM schools WHERE id = ?', user.school_id);
@@ -1778,6 +1790,9 @@ export function createApp(config = {}) {
       e.items,
     );
     zip.file('Bang-dap-an-va-Ma-tran.docx', answerSheetDoc);
+    // Gói in đầy đủ: ma trận + bản đặc tả và phiếu trả lời trắc nghiệm để in kèm
+    zip.file('Ma-tran-va-Ban-dac-ta.docx', await exportMatrixDocx({ title: e.title, school: school.name, durationMin: e.duration_min }, e.items, lessonObjectives(user.school_id)));
+    zip.file('Phieu-tra-loi.html', generateOmrTemplateHtml({ schoolName: school.name, examTitle: e.title, durationMin: e.duration_min }));
 
     const matrix = crossAnswerKey(e.items, variants, e.snapshot);
     const csvCell = safeCsvCell;

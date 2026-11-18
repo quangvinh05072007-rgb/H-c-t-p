@@ -151,3 +151,35 @@ test('Đề cấu trúc Bộ bằng 1 nút: đúng 12/4/6, 90 phút; đề tươ
   assert.equal(same, eq.data.kept, 'chỉ giữ câu khi không có câu thay');
   assert.ok(eq.data.exact + eq.data.relaxed > 0);
 });
+
+test('Ma trận & bản đặc tả: đếm đúng câu theo phần × mức; gói in có thêm ma trận và phiếu trả lời', async () => {
+  const { matrixData } = await import('../shared/exportMatrixDocx.mjs');
+  const items = [
+    { qid: 1, type: 'mcq', topic: 'T12.XSDK', level: 1 },
+    { qid: 2, type: 'mcq', topic: 'T12.XSDK', level: 2 },
+    { qid: 3, type: 'tf', topic: 'T12.NGUYENHAM', level: 2 },
+    { qid: 4, type: 'short', topic: 'T12.XSDK', level: 3 },
+  ];
+  const m = matrixData(items);
+  const xs = m.topics.find((t) => t.topic === 'T12.XSDK');
+  assert.deepEqual(xs.cells['I|1'], [1]);
+  assert.deepEqual(xs.cells['I|2'], [2]);
+  assert.deepEqual(xs.cells['III|3'], [1], 'đánh số riêng từng phần');
+  assert.equal(m.totalPoints, 0.25 + 0.25 + 1 + 0.5);
+  assert.equal(Math.round(m.topics.reduce((s, t) => s + t.pct, 0)), 100);
+
+  const lan = await login('gv.lan');
+  const exam = app.db.get("SELECT id FROM exams WHERE title LIKE 'Kiểm tra 15 phút%'");
+  const r = await fetch(`${base}/api/exams/${exam.id}/variants-zip`, { headers: { cookie: (await (async () => { const res = await fetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'gv.lan', password: SAMPLE_PASSWORD }) }); return res.headers.get('set-cookie').split(';')[0]; })()) } });
+  assert.equal(r.status, 200);
+  const JSZip = (await import('jszip')).default;
+  const zip = await JSZip.loadAsync(Buffer.from(await r.arrayBuffer()));
+  const names = Object.keys(zip.files);
+  assert.ok(names.includes('Ma-tran-va-Ban-dac-ta.docx'));
+  assert.ok(names.includes('Phieu-tra-loi.html'));
+  const doc = await JSZip.loadAsync(await zip.file('Ma-tran-va-Ban-dac-ta.docx').async('nodebuffer'));
+  const xml = await doc.file('word/document.xml').async('string');
+  assert.match(xml, /MA TRẬN ĐỀ KIỂM TRA/);
+  assert.match(xml, /BẢN ĐẶC TẢ/);
+  assert.equal((await lan.get(`/api/exams/${exam.id}`)).status, 200);
+});
