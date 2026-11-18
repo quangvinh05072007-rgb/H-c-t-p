@@ -2264,6 +2264,50 @@ export function createApp(config = {}) {
     const students = targeted(a, db.all("SELECT id, display_name FROM users WHERE class_id = ? AND role = 'student' AND active = 1 ORDER BY display_name", a.class_id));
     return { mode: a.variant_mode, students: students.map((s) => ({ id: s.id, name: s.display_name, code: a.variant_map?.[s.id] ?? null })) };
   });
+  // ---- VIỆC CẦN XỬ LÝ CỦA GIÁO VIÊN: gom từ khiếu nại, bài giao, câu nháp, file nhập ----
+  route('GET', '/api/teacher/todo', STAFF, ({ user }) => {
+    const t = now();
+    const ids = teacherClassIds(user);
+    const items = [];
+    const inList = ids.map(() => '?').join(',');
+    if (ids.length) {
+      const appeals = db.all(
+        `SELECT p.id, a.class_id, c.name class_name, a.id assignment_id, a.title FROM score_appeals p
+         JOIN attempts t ON t.id = p.attempt_id JOIN assignments a ON a.id = t.assignment_id JOIN classes c ON c.id = a.class_id
+         WHERE p.school_id = ? AND p.status = 'open' AND a.class_id IN (${inList}) ORDER BY p.created_at`,
+        user.school_id, ...ids,
+      );
+      const byClass = {};
+      for (const ap of appeals) (byClass[ap.class_id] ??= { ...ap, n: 0 }).n++;
+      for (const g of Object.values(byClass)) {
+        items.push({ kind: 'appeal', priority: 1, label: `${g.n} khiếu nại điểm chờ trả lời`, meta: `Lớp ${g.class_name}`, href: `/lop/${g.class_id}/ket-qua?view=appeals` });
+      }
+      const asgs = db.all(`SELECT a.*, c.name class_name FROM assignments a JOIN classes c ON c.id = a.class_id WHERE a.class_id IN (${inList})`, ...ids);
+      for (const a of asgs) {
+        const students = targeted(a, db.all("SELECT id FROM users WHERE class_id = ? AND role = 'student' AND active = 1", a.class_id)).length;
+        const submitted = db.get("SELECT COUNT(*) n FROM attempts WHERE assignment_id = ? AND status != 'in_progress'", a.id).n;
+        const missing = Math.max(0, students - submitted);
+        if (a.open_at <= t && a.close_at > t && a.close_at - t <= 48 * 3600000 && missing > 0) {
+          items.push({ kind: 'closing', priority: 2, label: `${a.title}: còn ${missing}/${students} em chưa nộp`, meta: `Lớp ${a.class_name} · đóng ${new Date(a.close_at).toISOString()}`, closeAt: a.close_at, href: `/lop/${a.class_id}/ket-qua/${a.id}` });
+        }
+        if (a.close_at <= t && t - a.close_at <= 7 * 86400000 && submitted > 0) {
+          const avg = db.get("SELECT AVG(score10) v FROM attempts WHERE assignment_id = ? AND status != 'in_progress'", a.id).v;
+          items.push({ kind: 'review', priority: 3, label: `Xem kết quả: ${a.title}`, meta: `Lớp ${a.class_name} · ${submitted}/${students} bài · TB ${avg === null ? '—' : (Math.round(avg * 100) / 100).toString().replace('.', ',')}`, href: `/lop/${a.class_id}/ket-qua/${a.id}` });
+        }
+      }
+    }
+    const drafts = db.get(
+      user.role === 'admin'
+        ? "SELECT COUNT(*) n FROM questions WHERE school_id = ? AND status = 'draft'"
+        : "SELECT COUNT(*) n FROM questions WHERE school_id = ? AND status = 'draft' AND created_by = ?",
+      ...(user.role === 'admin' ? [user.school_id] : [user.school_id, user.id]),
+    ).n;
+    if (drafts > 0) items.push({ kind: 'drafts', priority: 4, label: `${drafts} câu nháp chờ duyệt`, meta: 'Ngân hàng câu hỏi', href: '/ngan-hang' });
+    const jobs = importJobs.list(user).filter((j) => j.state === 'completed' && !(j.savedIds?.length));
+    if (jobs.length) items.push({ kind: 'import', priority: 5, label: `${jobs.length} file đã tách xong chờ đối chiếu`, meta: jobs.slice(0, 2).map((j) => j.name).join(', '), href: '/nhap-de' });
+    items.sort((x, y) => x.priority - y.priority || (x.closeAt ?? 0) - (y.closeAt ?? 0));
+    return { items };
+  });
   route('GET', '/api/assignments', STAFF, ({ user, query }) => {
     const ids = selectedClassIds(user, query.classId);
     if (!ids.length) return { assignments: [] };
