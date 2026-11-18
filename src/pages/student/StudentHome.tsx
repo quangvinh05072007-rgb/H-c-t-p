@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { BookMarked, CalendarClock, CircleCheck, ClipboardList, Flame, PenLine, RotateCcw, Sparkles, Timer, Zap } from 'lucide-react';
+import { BookOpen, CalendarClock, CircleCheck, ClipboardList, Flame, PenLine, Sparkles, Timer, Zap } from 'lucide-react';
 import { get, post } from '../../api';
 import { ErrorBox, fmtDateTime, fmtScore, go, Loading, scoreColor, useApp, useAsync } from '../../ui/kit';
 
@@ -25,6 +25,41 @@ function nextExam() {
     target = new Date(`${examYear}-06-26T07:30:00+07:00`).getTime();
   }
   return { year: examYear, days: Math.max(1, Math.ceil((target - Date.now()) / 86_400_000)) };
+}
+
+// Hình minh họa bàn học (giữ từ bản cũ, chỉ hiện trên màn hình rộng)
+function StudyDeskIllustration() {
+  return (
+    <svg width="110" height="82" viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <defs>
+        <linearGradient id="bookGrad" x1="20" y1="40" x2="140" y2="100" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#1e4d3b" />
+          <stop offset="1" stopColor="#0f766e" />
+        </linearGradient>
+        <linearGradient id="accentGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop stopColor="#f59e0b" />
+          <stop offset="1" stopColor="#d97706" />
+        </linearGradient>
+        <linearGradient id="glowGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop stopColor="#38bdf8" stopOpacity="0.35" />
+          <stop offset="1" stopColor="#38bdf8" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <circle cx="80" cy="60" r="50" fill="url(#glowGrad)" />
+      <ellipse cx="80" cy="100" rx="65" ry="12" fill="#e2e8f0" opacity="0.7" />
+      <rect x="35" y="80" width="55" height="12" rx="3" fill="#cbd5e1" />
+      <rect x="38" y="70" width="50" height="11" rx="3" fill="url(#bookGrad)" />
+      <rect x="42" y="60" width="45" height="11" rx="3" fill="#3b82f6" opacity="0.85" />
+      <rect x="80" y="42" width="52" height="38" rx="4" fill="#1e293b" />
+      <rect x="83" y="45" width="46" height="32" rx="2" fill="#0f172a" />
+      <path d="M88 68 Q98 48 106 62 T124 50" stroke="#38bdf8" strokeWidth="2" fill="none" strokeLinecap="round" />
+      <circle cx="106" cy="62" r="2.5" fill="#f59e0b" />
+      <path d="M72 82 H140 L135 88 H77 L72 82Z" fill="#94a3b8" />
+      <rect x="25" y="55" width="6" height="38" rx="2" transform="rotate(-25 25 55)" fill="url(#accentGrad)" />
+      <path d="M125 25 L127 31 L133 33 L127 35 L125 41 L123 35 L117 33 L123 31 Z" fill="#fbbf24" />
+      <path d="M50 30 L51.5 34 L55.5 35.5 L51.5 37 L50 41 L48.5 37 L44.5 35.5 L48.5 34 Z" fill="#38bdf8" opacity="0.9" />
+    </svg>
+  );
 }
 
 export function StudentHome() {
@@ -89,35 +124,49 @@ export function StudentHome() {
   const startTopicPractice = (topic: string, name?: string) =>
     run(() => post('/api/practice/start', { mode: 'topic', topics: [topic], count: 8 }), `Không thể tạo bài luyện chuyên đề ${name || topic}.`);
 
-  const todoCount = open.length + (practiceInProgress ? 1 : 0) + (dueCount > 0 ? 1 : 0);
+  const todoCount = open.length + (practiceInProgress ? 1 : 0);
   const feedback = home.teacherFeedback;
   const initial = (user.displayName || 'H').trim().split(/\s+/).pop()?.[0]?.toUpperCase() ?? 'H';
 
   return (
     <div className="su-page">
-      {/* Đầu trang: lời chào + số liệu gọn trên một dòng */}
-      <header className="su-head">
-        <div className="su-hello">
-          <div className="su-avatar" aria-hidden="true">{initial}</div>
-          <div style={{ minWidth: 0 }}>
-            <h1>{greeting}, {user.displayName}!</h1>
-            <p className="su-sub">
-              {user.class ? `Lớp ${user.class.name} · ` : ''}Mục tiêu tốt nghiệp THPT {exam.year}
-            </p>
+      {/* Lời chào + 3 ô số liệu (giữ màu sắc bản cũ) */}
+      <section className="su-hero" aria-label="Lời chào">
+        <div className="su-hero-who">
+          <div className="su-hero-avatar" aria-hidden="true">{initial}</div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="su-hero-name">
+              <h1>{greeting}, {user.displayName}!</h1>
+              {user.class && <span className="su-hero-class">Lớp {user.class.name}</span>}
+            </div>
+            <div className="su-hero-sub">
+              {goalPercent >= 100 ? (
+                <span style={{ color: 'var(--good)', fontWeight: 600 }}>Đã xong mục tiêu hôm nay. Giỏi lắm!</span>
+              ) : (
+                <span>Chuẩn bị bứt phá mục tiêu tốt nghiệp THPT {exam.year}</span>
+              )}
+            </div>
+          </div>
+          <div className="hide-on-mobile"><StudyDeskIllustration /></div>
+        </div>
+        <div className="su-hero-metrics">
+          <div className="su-metric" title={`Ước tính tới kỳ thi tốt nghiệp THPT ${exam.year}`}>
+            <span className="su-metric-label">Đếm ngược</span>
+            <b>{exam.days}</b>
+            <span className="su-metric-hint">ngày thi THPT</span>
+          </div>
+          <div className="su-metric is-amber">
+            <span className="su-metric-label"><Flame size={11} aria-hidden="true" /> Chuỗi học</span>
+            <b>{streak}</b>
+            <span className="su-metric-hint">ngày liên tục</span>
+          </div>
+          <div className={`su-metric ${goalPercent >= 100 ? 'is-green' : ''}`}>
+            <span className="su-metric-label">Hôm nay</span>
+            <b>{today.questions || 0}/{today.goal || 10}</b>
+            <span className="su-metric-hint">câu ({goalPercent}%)</span>
           </div>
         </div>
-        <div className="su-stats" aria-label="Số liệu hôm nay">
-          <span className="su-stat" title={`Ước tính tới kỳ thi tốt nghiệp THPT ${exam.year}`}>
-            <CalendarClock size={14} aria-hidden="true" /> <b>{exam.days}</b> ngày đến kỳ thi
-          </span>
-          <span className={`su-stat ${streak > 0 ? 'is-warn' : ''}`}>
-            <Flame size={14} aria-hidden="true" /> <b>{streak}</b> ngày liên tục
-          </span>
-          <span className={`su-stat ${goalPercent >= 100 ? 'is-good' : ''}`}>
-            Hôm nay <b>{today.questions || 0}/{today.goal || 10}</b> câu
-          </span>
-        </div>
-      </header>
+      </section>
 
       {feedback && (
         <section className="su-card su-feedback" aria-label="Lời phê của giáo viên">
@@ -132,9 +181,47 @@ export function StudentHome() {
         </section>
       )}
 
+      {/* Lối tắt 1 chạm, mỗi ô một màu như bản cũ */}
+      <section className="su-tiles" aria-label="Lối tắt học tập">
+        <button type="button" className="su-tile is-amber" disabled={busy} onClick={() => (dueCount > 0 ? startMistakeExam() : go('/so-tay-loi-sai'))}>
+          <span className="su-tile-icon"><PenLine size={18} aria-hidden="true" /></span>
+          <span className="su-tile-text">
+            <strong>Ôn câu sai</strong>
+            <small>{dueCount > 0 ? `${dueCount} câu cần ôn` : 'Sổ lỗi sạch'}</small>
+          </span>
+        </button>
+        <button type="button" className="su-tile is-rose" disabled={busy} onClick={startSpeedDrill}>
+          <span className="su-tile-icon"><Timer size={18} aria-hidden="true" /></span>
+          <span className="su-tile-text">
+            <strong>Luyện tốc độ</strong>
+            <small>15 phút · 12 câu</small>
+          </span>
+        </button>
+        <button type="button" className="su-tile is-teal" onClick={() => go('/luyen-vo-han')}>
+          <span className="su-tile-icon"><Zap size={18} aria-hidden="true" /></span>
+          <span className="su-tile-text">
+            <strong>Luyện liên tục</strong>
+            <small>Tự chỉnh độ khó</small>
+          </span>
+        </button>
+        <button type="button" className="su-tile is-sky" onClick={() => go('/luyen-tap')}>
+          <span className="su-tile-icon"><ClipboardList size={18} aria-hidden="true" /></span>
+          <span className="su-tile-text">
+            <strong>Kho đề</strong>
+            <small>Thi thử chấm điểm</small>
+          </span>
+        </button>
+        <button type="button" className="su-tile is-violet" onClick={() => go('/tu-hoc')}>
+          <span className="su-tile-icon"><BookOpen size={18} aria-hidden="true" /></span>
+          <span className="su-tile-text">
+            <strong>Tự học</strong>
+            <small>Lý thuyết & bài tập</small>
+          </span>
+        </button>
+      </section>
+
       <div className="su-split">
         {/* Cột chính: một danh sách việc duy nhất */}
-        <div className="su-col">
         <section className="su-card" aria-label="Việc cần làm">
           <div className="su-card-head">
             <h2>Việc cần làm</h2>
@@ -188,17 +275,6 @@ export function StudentHome() {
                 );
               })}
 
-              {dueCount > 0 && (
-                <div className="su-row">
-                  <div className="su-row-icon is-warn"><RotateCcw size={17} aria-hidden="true" /></div>
-                  <div className="su-row-main">
-                    <div className="su-row-title">Ôn {dueCount} câu sai đến hạn</div>
-                    <div className="su-row-meta">Làm lại để không quên cách giải</div>
-                  </div>
-                  <button type="button" className="btn sm" disabled={busy} onClick={startMistakeExam}>Ôn ngay</button>
-                </div>
-              )}
-
               {upcoming.map((a) => (
                 <div key={a.id} className="su-row">
                   <div className="su-row-icon"><CalendarClock size={17} aria-hidden="true" /></div>
@@ -240,29 +316,6 @@ export function StudentHome() {
             </div>
           )}
         </section>
-
-        <section className="su-card" aria-label="Luyện nhanh">
-          <div className="su-card-head"><h2>Luyện nhanh</h2></div>
-          <div className="su-quick is-wide">
-            <button type="button" disabled={busy} onClick={startSpeedDrill}>
-              <Timer size={18} aria-hidden="true" color="var(--primary)" />
-              <div>Luyện tốc độ<span>12 câu · 15 phút</span></div>
-            </button>
-            <button type="button" onClick={() => go('/luyen-vo-han')}>
-              <Zap size={18} aria-hidden="true" color="var(--primary)" />
-              <div>Luyện liên tục<span>Độ khó tự điều chỉnh</span></div>
-            </button>
-            <button type="button" onClick={() => go('/so-tay-loi-sai')}>
-              <BookMarked size={18} aria-hidden="true" color="var(--primary)" />
-              <div>Sổ tay lỗi sai<span>{data.mistakes?.totalMistakes ?? 0} câu đã lưu</span></div>
-            </button>
-            <button type="button" onClick={() => go('/luyen-tap')}>
-              <ClipboardList size={18} aria-hidden="true" color="var(--primary)" />
-              <div>Kho đề<span>Thi thử có chấm điểm</span></div>
-            </button>
-          </div>
-        </section>
-        </div>
 
         {/* Cột phụ */}
         <div className="su-col">

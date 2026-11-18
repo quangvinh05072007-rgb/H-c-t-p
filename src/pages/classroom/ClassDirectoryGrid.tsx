@@ -454,10 +454,28 @@ export function ClassDirectoryGrid({
                   )}
                 </div>
 
+                {/* Học sinh: chỉ một nhãn nhỏ khi có bài cần làm (cả thẻ đã bấm được để vào lớp) */}
+                {role === 'student' ? (
+                  pendingCount > 0 || openingId === c.id || !c.enrolled ? (
+                    <div className="cls-class-card-deadline">
+                      {openingId === c.id ? (
+                        <span className="is-muted">Đang mở lớp…</span>
+                      ) : !c.enrolled ? (
+                        <span className="is-active"><KeyRound size={14} /> Tham gia bằng mã</span>
+                      ) : (
+                        <span className={dl?.urgent ? 'is-urgent' : 'is-active'}>
+                          <Clock size={14} />
+                          {pendingCount} bài cần làm{dl ? ` · ${dl.label}` : ''}
+                        </span>
+                      )}
+                    </div>
+                  ) : null
+                ) : (
+                  <>
                 {/* Progress Bar */}
-                <div className="cls-class-card-progress">
+                  <div className="cls-class-card-progress">
                   <div className="cls-progress-label">
-                    <span>{role === 'student' ? 'Tiến độ học tập' : 'Tiến độ bài giao'}</span>
+                    <span>Tiến độ bài giao</span>
                     <strong className="tabular-nums">{progressPct}%</strong>
                   </div>
                   <div className="cls-progress-track">
@@ -466,17 +484,17 @@ export function ClassDirectoryGrid({
                       style={{ width: `${Math.min(100, Math.max(0, progressPct))}%` }}
                     />
                   </div>
-                </div>
+                  </div>
 
-                {/* Pending / Nearest Deadline */}
-                <div className="cls-class-card-deadline">
+                  {/* Pending / Nearest Deadline */}
+                  <div className="cls-class-card-deadline">
                   {pendingCount > 0 ? (
                     <span className={dl?.urgent ? 'is-urgent' : 'is-active'}>
                       <Clock size={14} />
-                      {pendingCount} {role === 'student' ? 'nhiệm vụ cần làm' : 'bài đang mở'}
+                      {pendingCount} bài đang mở
                       {dl ? ` · ${dl.label}` : ''}
                     </span>
-                  ) : role !== 'student' && c.avg_score !== null && c.avg_score !== undefined ? (
+                  ) : c.avg_score !== null && c.avg_score !== undefined ? (
                     <span className="is-good">
                       <Sparkles size={14} />
                       Điểm TB lớp: {fmtScore(c.avg_score)} đ
@@ -494,19 +512,20 @@ export function ClassDirectoryGrid({
                       )}
                     </span>
                   )}
-                </div>
+                  </div>
 
-                {/* Unified CTA Footer */}
+                  </>
+                )}
+
+                {/* Chân thẻ "Vào lớp học" chỉ còn cho giáo viên/quản lý */}
+                {role !== 'student' && (
                 <div className="cls-class-card-cta">
                   <span>
-                    {openingId === c.id
-                      ? 'Đang mở lớp…'
-                      : role === 'student' && !c.enrolled
-                      ? 'Tham gia bằng mã'
-                      : 'Vào lớp học'}
+                    {openingId === c.id ? 'Đang mở lớp…' : 'Vào lớp học'}
                   </span>
                   <ArrowRight size={16} />
                 </div>
+                )}
               </button>
             );
           })}
