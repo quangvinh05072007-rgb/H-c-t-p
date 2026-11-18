@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
-  Award,
   Bell,
   BookOpen,
   CheckCircle2,
   ClipboardCheck,
   Clock,
   KeyRound,
-  Layers,
   Play,
-  Sparkles,
 } from 'lucide-react';
 import { get, post } from '../../api';
 import { ErrorBox, fmtDateTime, fmtScore, go, Loading, Modal, scoreColor, useApp, useAsync } from '../../ui/kit';
@@ -22,7 +19,6 @@ import { GradesTab } from '../classroom/GradesTab';
 import { AnnouncementsView, ClassInfoView, MembersView } from '../classroom/ClassExtraViews';
 import {
   formatDeadlineShort,
-  formatLastStudy,
   getAssignmentStatusMeta,
   getNextFocusItem,
 } from '../classroom/classroomState';
@@ -224,6 +220,9 @@ export function StudentClass({
     }
   };
 
+  const focusAssignmentId = overviewStats.focus?.assignment?.id ?? null;
+  const otherTodos = overviewStats.todoItems.filter((a: any) => a.id !== focusAssignmentId);
+
   const copyCode = async () => {
     if (!cls?.code) return;
     try {
@@ -239,7 +238,7 @@ export function StudentClass({
     return (
       <ClassDirectoryGrid
         role="student"
-        classes={allClasses}
+        classes={allClasses.filter((c: any) => c.enrolled)}
         loading={loading && !data}
         error={error}
         onRetry={reload}
@@ -375,66 +374,23 @@ export function StudentClass({
       {activeTab === 'overview' && (
         <div className="cls-overview-grid">
           <div className="cls-overview-main">
-            {/* 4 KPI Cards */}
-            <div className="cls-kpi-grid">
-              <div className="cls-kpi-card">
-                <div className="cls-kpi-icon is-primary">
-                  <Layers size={18} />
-                </div>
-                <div>
-                  <div className="cls-kpi-label">Tiến độ hoàn thành</div>
-                  <div className="cls-kpi-value tabular-nums">
-                    {overviewStats.doneTasks}/{overviewStats.totalTasks}
-                  </div>
-                  <div className="cls-kpi-hint tabular-nums">{overviewStats.progressPct}% nội dung</div>
-                </div>
-              </div>
-
-              <div className="cls-kpi-card">
-                <div className="cls-kpi-icon is-warn">
-                  <Clock size={18} />
-                </div>
-                <div>
-                  <div className="cls-kpi-label">Bài cần làm</div>
-                  <div className="cls-kpi-value tabular-nums">{overviewStats.pendingCount}</div>
-                  <div className="cls-kpi-hint">
-                    {overviewStats.pendingCount > 0 ? 'Đang mở trong lớp' : 'Đã hoàn thành hết'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="cls-kpi-card">
-                <div className="cls-kpi-icon is-good">
-                  <Award size={18} />
-                </div>
-                <div>
-                  <div className="cls-kpi-label">Điểm trung bình</div>
-                  <div
-                    className="cls-kpi-value tabular-nums"
-                    style={{ color: overviewStats.avgScore !== null ? scoreColor(overviewStats.avgScore) : undefined }}
-                  >
-                    {overviewStats.avgScore !== null ? `${fmtScore(overviewStats.avgScore)} đ` : 'Chưa có'}
-                  </div>
-                  <div className="cls-kpi-hint">
-                    {overviewStats.gradedCount > 0 ? `${overviewStats.gradedCount} bài đã chấm` : 'Chưa có bài chấm'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="cls-kpi-card">
-                <div className="cls-kpi-icon is-soft">
-                  <Sparkles size={18} />
-                </div>
-                <div>
-                  <div className="cls-kpi-label">Hoạt động tiếp theo</div>
-                  <div className="cls-kpi-value cls-kpi-value-sm">
-                    {overviewStats.focus ? overviewStats.focus.badgeLabel : 'Hoàn tất'}
-                  </div>
-                  <div className="cls-kpi-hint">
-                    {overviewStats.focus ? overviewStats.focus.title : 'Không có bài tồn đọng'}
-                  </div>
-                </div>
-              </div>
+            {/* Số liệu gọn trên một dòng */}
+            <div className="su-stats" aria-label="Tiến độ trong lớp">
+              <span className="su-stat" title={`${overviewStats.progressPct}% nội dung lớp`}>
+                Tiến độ <b>{overviewStats.doneTasks}/{overviewStats.totalTasks}</b>
+              </span>
+              <span className={`su-stat ${overviewStats.pendingCount > 0 ? 'is-warn' : 'is-good'}`}>
+                Cần làm <b>{overviewStats.pendingCount}</b>
+              </span>
+              <span className="su-stat">
+                Điểm TB{' '}
+                <b style={{ color: overviewStats.avgScore !== null ? scoreColor(overviewStats.avgScore) : undefined }}>
+                  {overviewStats.avgScore !== null ? fmtScore(overviewStats.avgScore) : '—'}
+                </b>
+              </span>
+              <span className="su-stat">
+                Tài liệu đã xem <b>{overviewStats.viewedMats}/{overviewStats.totalMats}</b>
+              </span>
             </div>
 
             {/* Smart Focus Card ("Tiếp tục học") */}
@@ -497,19 +453,19 @@ export function StudentClass({
             {/* To-Do List ("Việc cần làm") */}
             <section className="cls-surface-card">
               <div className="cls-card-head">
-                <h2>Việc cần làm</h2>
+                <h2>{overviewStats.focus ? 'Việc khác' : 'Việc cần làm'}</h2>
                 <button type="button" className="cls-text-link" onClick={() => setActiveTab('quizzes')}>
                   Tất cả bài kiểm tra <ArrowRight size={14} />
                 </button>
               </div>
 
-              {overviewStats.todoItems.length === 0 ? (
+              {otherTodos.length === 0 ? (
                 <div className="cls-muted-text">
-                  Không còn bài kiểm tra hay bài tập nào cần hoàn thành trong lớp.
+                  {overviewStats.focus ? 'Không còn bài nào khác cần làm.' : 'Không còn bài kiểm tra hay bài tập nào cần hoàn thành trong lớp.'}
                 </div>
               ) : (
                 <div className="cls-todo-list">
-                  {overviewStats.todoItems.slice(0, 5).map((a) => {
+                  {otherTodos.slice(0, 5).map((a) => {
                     const st = getAssignmentStatusMeta(a);
                     const dl = formatDeadlineShort(a.close_at);
                     const locked = a.module_id ? Boolean(modLockedMap.get(a.module_id)) : false;
@@ -562,44 +518,7 @@ export function StudentClass({
           </div>
 
           {/* Right Context Rail (Overview only) */}
-          <aside className="cls-overview-rail" aria-label="Tiến độ và thông báo">
-            <section className="cls-surface-card">
-              <div className="cls-card-head">
-                <h3>Tiến độ của tôi</h3>
-                <span className="cls-muted-text tabular-nums">{overviewStats.progressPct}%</span>
-              </div>
-
-              <div className="cls-rail-stat-row">
-                <strong className="cls-rail-big tabular-nums">
-                  {overviewStats.doneTasks}/{overviewStats.totalTasks}
-                </strong>
-                <span className="cls-muted-text">nội dung đã xong</span>
-              </div>
-
-              <div className="cls-progress-track">
-                <div className="cls-progress-fill" style={{ width: `${overviewStats.progressPct}%` }} />
-              </div>
-
-              <div className="cls-rail-detail-list">
-                <div className="cls-rail-detail-row">
-                  <span>Tài liệu đã xem</span>
-                  <strong className="tabular-nums">
-                    {overviewStats.viewedMats}/{overviewStats.totalMats}
-                  </strong>
-                </div>
-                <div className="cls-rail-detail-row">
-                  <span>Bài đã nộp</span>
-                  <strong className="tabular-nums">
-                    {overviewStats.doneAsg}/{assignments.length}
-                  </strong>
-                </div>
-                <div className="cls-rail-detail-row">
-                  <span>Học gần nhất</span>
-                  <strong>{formatLastStudy(data?.lastStudyAt)}</strong>
-                </div>
-              </div>
-            </section>
-
+          <aside className="cls-overview-rail" aria-label="Thông báo">
             <section className="cls-surface-card">
               <div className="cls-card-head">
                 <h3>Thông báo mới</h3>

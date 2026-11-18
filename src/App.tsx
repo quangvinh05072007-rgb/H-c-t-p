@@ -376,7 +376,8 @@ export function App() {
     '/loi-sai',
     '/ghi-chu',
   ]);
-  const isStudentStudyActive = pathMatchesAny(path, ['/tu-hoc', '/ban-do-tri-thuc', '/mon-hoc', '/hoc-phan', '/on-tap', '/chuyen-de']);
+  const isStudentStudyActive = pathMatchesAny(path, ['/tu-hoc', '/ban-do-tri-thuc', '/mon-hoc', '/hoc-phan', '/on-tap', '/chuyen-de', '/luyen-vo-han', '/nhiem-vu']);
+  const isStudentResultsActive = pathMatchesAny(path, ['/ket-qua', '/tien-bo', '/khieu-nai']);
 
   const librarySubItems: SubItem[] = [
     { path: '/thu-vien', label: 'Kho đề thi', icon: FolderOpen },
@@ -430,6 +431,7 @@ export function App() {
     { path: '/luyen-tap', label: 'Đề thi', icon: ClipboardList, active: isStudentExamsActive },
     { path: '/tu-hoc', label: 'Tự học', icon: BookOpen, active: isStudentStudyActive },
     { path: '/lop-hoc', label: 'Lớp học', icon: GraduationCap, active: isClassesActive },
+    { path: '/ket-qua', label: 'Kết quả', icon: BarChart3, active: isStudentResultsActive },
   ];
 
   const getSearchItems = () => {

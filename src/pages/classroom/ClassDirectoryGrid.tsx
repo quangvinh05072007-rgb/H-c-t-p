@@ -86,7 +86,10 @@ export function ClassDirectoryGrid({
     setFilters((prev) => ({ ...prev, [key]: val }));
   };
 
+  // Học sinh ít lớp: không cần ô tìm kiếm/bộ lọc (và bỏ qua bộ lọc đã lưu để không ẩn nhầm lớp).
+  const showToolbar = role !== 'student' || classes.length > 5;
   const filteredClasses = useMemo(() => {
+    if (!showToolbar) return classes;
     const q = filters.search.trim().toLowerCase();
     return classes.filter((c) => {
       if (filters.statusFilter !== 'all') {
@@ -102,7 +105,7 @@ export function ClassDirectoryGrid({
       }
       return true;
     });
-  }, [classes, filters.gradeFilter, filters.search, filters.statusFilter]);
+  }, [classes, filters.gradeFilter, filters.search, filters.statusFilter, showToolbar]);
 
   const statusCounts = useMemo(() => {
     const active = classes.filter((c) => (c.status ?? 'active') === 'active').length;
@@ -181,7 +184,7 @@ export function ClassDirectoryGrid({
           <h1 className="cls-dir-title">Lớp học của tôi</h1>
           <p className="cls-dir-subtitle">
             {classes.length} lớp học
-            {totalStudents > 0 ? ` · ${totalStudents} học sinh` : ''}
+            {totalStudents > 0 && role !== 'student' ? ` · ${totalStudents} học sinh` : ''}
             {activeTasksCount > 0
               ? role === 'student'
                 ? ` · ${activeTasksCount} nhiệm vụ cần hoàn thành`
@@ -242,6 +245,7 @@ export function ClassDirectoryGrid({
       </header>
 
       {/* Compact Filter Toolbar */}
+      {showToolbar && (
       <div className="cls-filter-bar">
         <div className="cls-filter-left">
           <div className="cls-search-box">
@@ -320,6 +324,7 @@ export function ClassDirectoryGrid({
           )}
         </div>
       </div>
+      )}
 
       {/* Loading Skeleton */}
       {loading && (

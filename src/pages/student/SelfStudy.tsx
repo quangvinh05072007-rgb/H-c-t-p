@@ -1,23 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
-  BookOpen,
   Check,
   Clock,
   Layers,
-  RotateCcw,
   Search,
   Sparkles,
-  X,
 } from 'lucide-react';
 import { get, post } from '../../api';
-import { ErrorBox, fmtDateTime, go, Loading, useApp, useAsync } from '../../ui/kit';
+import { ErrorBox, go, Loading, useApp, useAsync } from '../../ui/kit';
 import {
   getStudyStatusMeta,
   readLastStudiedTopic,
   saveLastStudiedTopic,
   StudyStatusIcon,
-  TopicGlyph,
 } from '../../ui/selfstudy/TopicStudyHelpers';
 import { StudyTopic, TopicStudyWorkspace } from './TopicStudyWorkspace';
 
@@ -306,361 +302,187 @@ export function SelfStudy() {
     );
   }
 
-  const completionPct = Math.round(stats.completionRatio * 100);
-
   return (
-    <div className="selfstudy-shell">
-      {/* 1. Khu vực đầu trang: Không gian tự học */}
-      <section className="ss-hero-panel" aria-label="Tổng quan không gian tự học">
-        <div>
-          <div className="ss-hero-kicker">
-            <BookOpen size={16} aria-hidden="true" />
-            <span>{currentSubj.name}</span>
-            <span aria-hidden="true">·</span>
-            <span>Lớp {selectedGrade}</span>
-            {user.class?.name && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span>Lớp đang học: {user.class.name}</span>
-              </>
-            )}
-          </div>
-          <h1 className="ss-hero-title">Không gian tự học</h1>
-          <p className="ss-hero-subtitle">
-            Ôn vững kiến thức nền tảng, luyện phản xạ từng chuyên đề và củng cố đúng phần còn yếu mỗi ngày.
+    <div className="selfstudy-shell su-page">
+      {/* Đầu trang gọn: tiêu đề, tiến độ, một nút học tiếp */}
+      <header className="su-head">
+        <div style={{ minWidth: 0 }}>
+          <h1>Tự học</h1>
+          <p className="su-sub">
+            {currentSubj.name} · Lớp {selectedGrade} · {stats.mastered}/{stats.total} chủ đề thành thạo
           </p>
         </div>
-
-        <div className="ss-hero-metrics">
-          <div>
-            <div className="ss-progress-summary-head">
-              <span>Tiến độ hoàn thành Lớp {selectedGrade}</span>
-              <strong className="tabular-nums">
-                {stats.mastered}/{stats.total} chủ đề thành thạo ({completionPct}%)
-              </strong>
-            </div>
-            <div className="ss-progress-track" style={{ marginTop: 8 }}>
-              <div className="ss-progress-fill" style={{ width: `${completionPct}%` }} />
-            </div>
-          </div>
-
-          <div className="ss-kpi-strip" role="group" aria-label="Lọc nhanh theo trạng thái">
-            <button
-              type="button"
-              className={`ss-kpi-tile ${statusFilter === 'all' ? 'is-active' : ''}`}
-              onClick={() => setStatusFilter('all')}
-            >
-              <span className="ss-kpi-value tabular-nums">{stats.total}</span>
-              <span className="ss-kpi-label">Tổng chủ đề</span>
-            </button>
-            <button
-              type="button"
-              className={`ss-kpi-tile ${statusFilter === 'mastered' ? 'is-active' : ''}`}
-              onClick={() => setStatusFilter(statusFilter === 'mastered' ? 'all' : 'mastered')}
-            >
-              <span className="ss-kpi-value tabular-nums">{stats.mastered}</span>
-              <span className="ss-kpi-label">Đã thành thạo</span>
-            </button>
-            <button
-              type="button"
-              className={`ss-kpi-tile ${statusFilter === 'learning' ? 'is-active' : ''}`}
-              onClick={() => setStatusFilter(statusFilter === 'learning' ? 'all' : 'learning')}
-            >
-              <span className="ss-kpi-value tabular-nums">{stats.learning}</span>
-              <span className="ss-kpi-label">Đang học</span>
-            </button>
-            <button
-              type="button"
-              className={`ss-kpi-tile ${statusFilter === 'weak' ? 'is-active' : ''}`}
-              onClick={() => setStatusFilter(statusFilter === 'weak' ? 'all' : 'weak')}
-            >
-              <span className="ss-kpi-value tabular-nums">{stats.weak}</span>
-              <span className="ss-kpi-label">Cần củng cố</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Vị trí học gần nhất hoặc chủ đề ưu tiên */}
-      {suggestedSpotlight && (
-        <section className="ss-continue-banner" aria-label="Gợi ý học tiếp">
-          <div className="ss-continue-info">
-            <div className="ss-continue-icon" aria-hidden="true">
-              {suggestedSpotlight.kind === 'recent' ? <Clock size={20} /> : <Sparkles size={20} />}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div className="ss-continue-meta">
-                {suggestedSpotlight.kind === 'recent'
-                  ? `Học gần nhất · ${fmtDateTime(suggestedSpotlight.meta.openedAt)}`
-                  : suggestedSpotlight.kind === 'recommended'
-                  ? 'Chủ đề đề xuất tiếp theo'
-                  : 'Ưu tiên củng cố'}
-              </div>
-              <div className="ss-continue-title">{suggestedSpotlight.topic.name}</div>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="ss-btn ss-btn-primary ss-btn-sm"
-            onClick={() => openTopicByCode(suggestedSpotlight.topic.code)}
-          >
-            <span>{suggestedSpotlight.kind === 'recent' ? 'Học tiếp bài này' : 'Mở chủ đề'}</span>
+        {suggestedSpotlight && (
+          <button type="button" className="btn primary" onClick={() => openTopicByCode(suggestedSpotlight.topic.code)}>
+            {suggestedSpotlight.kind === 'recent' ? <Clock size={15} aria-hidden="true" /> : <Sparkles size={15} aria-hidden="true" />}
+            <span>
+              {suggestedSpotlight.kind === 'recent' ? 'Học tiếp' : 'Nên học'}: {suggestedSpotlight.topic.name}
+            </span>
             <ArrowRight size={15} aria-hidden="true" />
           </button>
-        </section>
-      )}
+        )}
+      </header>
 
-      {/* 2. Thanh điều hướng bộ lọc thống nhất */}
-      <section className="ss-toolbar-card" aria-label="Bộ lọc chủ đề tự học">
-        <div className="ss-subject-tablist" role="tablist" aria-label="Chọn môn học">
-          {SUBJECTS.map((s) => {
-            const active = selectedSubject === s.id;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                className={`ss-subject-tab ${active ? 'is-active' : ''}`}
-                onClick={() => {
-                  setSelectedSubject(s.id);
-                  setPicked([]);
-                  setMultiPickMode(false);
-                  setSearchQuery('');
-                  setStatusFilter('all');
-                  setActiveTopicCode(null);
-                }}
-              >
-                <TopicGlyph subjectId={s.id} size={16} />
-                <span>{s.name}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="ss-controls-row">
-          <div className="ss-grade-segmented" role="group" aria-label="Chọn khối lớp">
-            {[12, 11, 10].map((g) => (
-              <button
-                key={g}
-                type="button"
-                aria-pressed={selectedGrade === g}
-                className={`ss-grade-btn ${selectedGrade === g ? 'is-active' : ''}`}
-                onClick={() => {
-                  setSelectedGrade(g);
-                  setPicked([]);
-                }}
-              >
-                Lớp {g}
-              </button>
-            ))}
-          </div>
-
-          <div className="ss-controls-right">
-            <div className="ss-search-box">
-              <span className="ss-search-leading" aria-hidden="true">
-                <Search size={16} />
-              </span>
-              <input
-                type="search"
-                className="ss-search-input"
-                placeholder="Tìm tên chủ đề…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label="Tìm kiếm chủ đề tự học"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  className="ss-search-clear"
-                  onClick={() => setSearchQuery('')}
-                  aria-label="Xóa từ khóa tìm kiếm"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            <select
-              className="ss-select-control"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              aria-label="Lọc theo trạng thái học tập"
+      {/* Một hàng chọn môn + khối, một hàng tìm kiếm và trạng thái */}
+      <div className="su-filterbar">
+        <div className="su-pills" role="tablist" aria-label="Chọn môn học">
+          {SUBJECTS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={selectedSubject === s.id}
+              className={`su-pill ${selectedSubject === s.id ? 'on' : ''}`}
+              onClick={() => {
+                setSelectedSubject(s.id);
+                setPicked([]);
+                setMultiPickMode(false);
+                setSearchQuery('');
+                setStatusFilter('all');
+                setActiveTopicCode(null);
+              }}
             >
-              <option value="all">Tất cả trạng thái ({stats.total})</option>
-              <option value="weak">Cần củng cố ({stats.weak})</option>
-              <option value="learning">Đang học ({stats.learning})</option>
-              <option value="mastered">Đã thành thạo ({stats.mastered})</option>
-              <option value="unattempted">Chưa học ({stats.unattempted})</option>
-            </select>
-
-            {selectedSubject === 'math' && (
-              <button
-                type="button"
-                className={`ss-btn ss-btn-sm ${multiPickMode ? 'ss-btn-accent' : ''}`}
-                aria-pressed={multiPickMode}
-                onClick={() => {
-                  if (multiPickMode) {
-                    setMultiPickMode(false);
-                    setPicked([]);
-                  } else {
-                    setMultiPickMode(true);
-                  }
-                }}
-              >
-                <Layers size={15} aria-hidden="true" />
-                <span>{multiPickMode ? `Đang ghép (${picked.length})` : 'Ghép nhiều chủ đề'}</span>
-              </button>
-            )}
-          </div>
+              {s.name}
+            </button>
+          ))}
         </div>
-      </section>
+        <span className="su-grow" />
+        <div className="seg" role="group" aria-label="Chọn khối lớp">
+          {[12, 11, 10].map((g) => (
+            <button
+              key={g}
+              type="button"
+              aria-pressed={selectedGrade === g}
+              className={selectedGrade === g ? 'on' : ''}
+              onClick={() => {
+                setSelectedGrade(g);
+                setPicked([]);
+              }}
+            >
+              Lớp {g}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      {/* 3. Lưới thẻ chủ đề 2 cột hiện đại */}
-      {filteredTopics.length === 0 ? (
-        <div className="ss-empty-card">
-          <BookOpen size={30} color="var(--ss-muted)" aria-hidden="true" />
-          <h2 style={{ margin: 0, fontSize: 18 }}>Không tìm thấy chủ đề phù hợp</h2>
-          <p style={{ margin: 0, fontSize: 14.5, color: 'var(--ss-muted)' }}>
-            Thử đổi từ khóa tìm kiếm hoặc chọn lại trạng thái, khối lớp khác.
-          </p>
+      <div className="su-filterbar">
+        <div className="su-pills" role="group" aria-label="Lọc theo trạng thái học tập">
+          {(
+            [
+              ['all', `Tất cả ${stats.total}`],
+              ['weak', `Cần củng cố ${stats.weak}`],
+              ['learning', `Đang học ${stats.learning}`],
+              ['mastered', `Thành thạo ${stats.mastered}`],
+              ['unattempted', `Chưa học ${stats.unattempted}`],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={statusFilter === key}
+              className={`su-pill ${statusFilter === key ? 'on' : ''}`}
+              onClick={() => setStatusFilter(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="su-grow" />
+        <label style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <Search size={14} aria-hidden="true" style={{ position: 'absolute', left: 10, color: 'var(--ink-3)' }} />
+          <input
+            type="search"
+            placeholder="Tìm chủ đề…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Tìm kiếm chủ đề tự học"
+            style={{ paddingLeft: 30, width: 180, minHeight: 34 }}
+          />
+        </label>
+        {selectedSubject === 'math' && (
           <button
             type="button"
-            className="ss-btn ss-btn-sm"
+            className={`btn sm ${multiPickMode ? 'primary' : ''}`}
+            aria-pressed={multiPickMode}
+            onClick={() => {
+              if (multiPickMode) {
+                setMultiPickMode(false);
+                setPicked([]);
+              } else {
+                setMultiPickMode(true);
+              }
+            }}
+          >
+            <Layers size={14} aria-hidden="true" />
+            {multiPickMode ? `Đang ghép (${picked.length})` : 'Ghép nhiều chủ đề'}
+          </button>
+        )}
+      </div>
+
+      {filteredTopics.length === 0 ? (
+        <div className="su-card su-empty">
+          Không tìm thấy chủ đề phù hợp.{' '}
+          <button
+            type="button"
+            className="su-link"
             onClick={() => {
               setSearchQuery('');
               setStatusFilter('all');
             }}
           >
-            <RotateCcw size={14} aria-hidden="true" />
-            <span>Đặt lại bộ lọc</span>
+            Đặt lại bộ lọc
           </button>
         </div>
       ) : (
-        <div className="ss-topics-grid" role="list" aria-label="Danh sách chủ đề tự học">
+        <div className="su-topic-grid" role="list" aria-label="Danh sách chủ đề tự học">
           {filteredTopics.map((topic) => {
             const m = mastery[topic.code];
             const pctVal = m ? Math.round(m.value * 100) : null;
             const statusMeta = getStudyStatusMeta(pctVal);
-            const domain = selectedSubject === 'math' ? getTopicDomain(topic.code) : 'algebra';
-            const domainLabel = selectedSubject === 'math' ? DOMAINS[domain] : currentSubj.name;
             const bankNode = nodeByCode[topic.code];
             const isPicked = picked.includes(topic.code);
             const isRecommended = recommendedCodes.includes(topic.code);
-
-            const handleCardAction = () => {
-              if (multiPickMode && selectedSubject === 'math') {
-                toggle(topic.code);
-              } else {
-                openTopicByCode(topic.code);
-              }
-            };
+            const picking = multiPickMode && selectedSubject === 'math';
+            const barColor =
+              statusMeta.key === 'weak' ? 'var(--warn)' : statusMeta.key === 'mastered' ? 'var(--good)' : 'var(--primary)';
 
             return (
-              <article
+              <button
                 key={topic.code}
+                type="button"
                 role="listitem"
-                tabIndex={0}
-                className={`ss-topic-card ${isPicked ? 'is-picked' : ''}`}
-                onClick={handleCardAction}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleCardAction();
-                  }
-                }}
+                aria-pressed={picking ? isPicked : undefined}
+                className={`su-card su-topic ${isPicked ? 'is-picked' : ''} ${isRecommended ? 'is-next' : ''}`}
+                onClick={() => (picking ? toggle(topic.code) : openTopicByCode(topic.code))}
               >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div className="ss-card-top">
-                    <div className="ss-card-identity">
-                      <div
-                        className={`ss-topic-icon-box ${
-                          statusMeta.key === 'weak'
-                            ? 'is-weak'
-                            : statusMeta.key === 'mastered'
-                            ? 'is-mastered'
-                            : ''
-                        }`}
-                      >
-                        <TopicGlyph subjectId={selectedSubject} domain={domain} size={20} />
-                      </div>
-                      <div className="ss-card-title-wrap">
-                        <h3 className="ss-card-title">{topic.name}</h3>
-                        <div className="ss-card-meta">
-                          <span>{domainLabel}</span>
-                          {selectedSubject === 'math' && bankNode && (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span className="tabular-nums">{bankNode.questionCount} câu hỏi có sẵn</span>
-                            </>
-                          )}
-                          {isRecommended && (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span style={{ color: 'var(--ss-primary)', fontWeight: 600 }}>Đề xuất tiếp theo</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <span className={`ss-status-tag ${statusMeta.className}`}>
-                      <StudyStatusIcon status={statusMeta.key} size={13} />
-                      <span>{statusMeta.label}</span>
-                    </span>
-                  </div>
-
-                  <div className="ss-card-progress">
-                    <div className="ss-card-progress-row">
-                      <span>{pctVal !== null ? 'Mức độ thành thạo' : 'Tiến độ luyện tập'}</span>
-                      <strong className="tabular-nums">
-                        {pctVal !== null
-                          ? `${pctVal}%${m?.n ? ` · ${m.n} lượt làm` : ''}`
-                          : 'Chưa bắt đầu'}
-                      </strong>
-                    </div>
-                    <div className="ss-progress-track">
-                      <div
-                        className={`ss-progress-fill ${
-                          statusMeta.key === 'weak'
-                            ? 'is-warn'
-                            : statusMeta.key === 'learning'
-                            ? 'is-accent'
-                            : ''
-                        }`}
-                        style={{ width: `${pctVal ?? 0}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="ss-card-footer">
-                  <span className="ss-card-note">
-                    {m?.last ? `Ôn gần nhất ${fmtDateTime(m.last)}` : `Chương trình Lớp ${topic.grade}`}
-                  </span>
-
-                  {multiPickMode && selectedSubject === 'math' ? (
-                    <span className="ss-pick-indicator">
-                      {isPicked ? <Check size={16} aria-hidden="true" /> : null}
-                      <span>{isPicked ? 'Đã chọn vào đợt luyện' : 'Nhấn để chọn ghép'}</span>
+                <div className="su-exam-top" style={{ alignItems: 'flex-start' }}>
+                  <span className="su-topic-name">{topic.name}</span>
+                  {picking ? (
+                    <span className={`su-chip ${isPicked ? 'is-info' : ''}`}>
+                      {isPicked ? <Check size={12} aria-hidden="true" /> : null}
+                      {isPicked ? 'Đã chọn' : 'Chọn'}
                     </span>
                   ) : (
-                    <button
-                      type="button"
-                      className={`ss-btn ss-btn-sm ${
-                        statusMeta.key === 'mastered' ? '' : 'ss-btn-primary'
-                      }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openTopicByCode(topic.code);
-                      }}
-                    >
-                      <span>{statusMeta.actionLabel}</span>
-                      <ArrowRight size={14} aria-hidden="true" />
-                    </button>
+                    <span className={`ss-status-tag ${statusMeta.className}`}>
+                      <StudyStatusIcon status={statusMeta.key} size={12} />
+                      <span>{statusMeta.label}</span>
+                    </span>
                   )}
                 </div>
-              </article>
+                <div className="su-bar">
+                  <span style={{ width: `${pctVal ?? 0}%`, background: barColor }} />
+                </div>
+                <div className="su-topic-foot">
+                  <span className="tabular-nums">
+                    {pctVal !== null ? `${pctVal}% thành thạo${m?.n ? ` · ${m.n} lượt` : ''}` : 'Chưa học'}
+                  </span>
+                  {isRecommended ? (
+                    <span className="su-chip is-info">Đề xuất</span>
+                  ) : selectedSubject === 'math' && bankNode ? (
+                    <span className="tabular-nums">{bankNode.questionCount} câu luyện</span>
+                  ) : null}
+                </div>
+              </button>
             );
           })}
         </div>

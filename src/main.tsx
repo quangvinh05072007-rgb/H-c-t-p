@@ -10,6 +10,7 @@ import './infinite-ui.css';
 import './nav-refactor.css';
 import './teacher-studio.css';
 import './self-study.css';
+import './student-ui.css';
 import { App } from './App';
 import { registerPwa } from './pwa';
 
