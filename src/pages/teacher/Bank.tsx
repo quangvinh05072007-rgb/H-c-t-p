@@ -76,7 +76,7 @@ export function Bank() {
   const [discussion, setDiscussion] = useState<number | null>(null);
   const [history, setHistory] = useState<number | null>(null);
   const [editReason, setEditReason] = useState('');
-  const [viewMode, setViewMode] = useState<'infinite' | 'standard'>('infinite');
+  const viewMode: 'infinite' | 'standard' = 'infinite';
   const [createExamModalOpen, setCreateExamModalOpen] = useState(false);
   const [newExamTitle, setNewExamTitle] = useState('');
   const [newExamDuration, setNewExamDuration] = useState(45);
@@ -188,24 +188,9 @@ export function Bank() {
             {data?.counts?.approved ?? 0} câu đã duyệt · {data?.counts?.draft ?? 0} câu nháp
           </>} />
         <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="filter-pills" style={{ background: 'var(--surface-subtle)', padding: 3, borderRadius: 8, border: '1px solid var(--line)' }}>
-            <button
-              type="button"
-              className={`btn sm ${viewMode === 'infinite' ? 'primary' : 'ghost'}`}
-              style={{ padding: '5px 12px', fontSize: 12.5 }}
-              onClick={() => setViewMode('infinite')}
-            >
-              <Layers size={14} /> Cuộn vô hạn
-            </button>
-            <button
-              type="button"
-              className={`btn sm ${viewMode === 'standard' ? 'primary' : 'ghost'}`}
-              style={{ padding: '5px 12px', fontSize: 12.5 }}
-              onClick={() => setViewMode('standard')}
-            >
-              <Table2 size={14} /> Bảng phân loại
-            </button>
-          </div>
+          <button className="btn sm" onClick={() => download('/api/questions/export.xlsx', 'ngan-hang-cau-hoi.xlsx').catch((e) => toast(e.message))}>
+            Xuất Excel
+          </button>
           <button className="btn sm primary" onClick={create}>
             <Icon name="plus" /> Thêm câu
           </button>
@@ -215,6 +200,8 @@ export function Bank() {
       {viewMode === 'infinite' ? (
         <InfiniteQuestionBank
           onEdit={(q) => setEditing(q)}
+          onHistory={(id) => setHistory(id)}
+          onDiscuss={(id) => setDiscussion(id)}
           onCreateNew={create}
           classId={requestedClass && /^\d+$/.test(requestedClass) ? Number(requestedClass) : null}
           onCreateExamFromIds={(ids) => {

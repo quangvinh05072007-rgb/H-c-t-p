@@ -15,7 +15,7 @@ import {
   Users,
 } from 'lucide-react';
 import { get, post } from '../../api';
-import { ErrorBox, fmtDateTime, fmtScore, go, Loading, topicName, useApp, useAsync, useRoute } from '../../ui/kit';
+import { ErrorBox, fmtDateTime, fmtScore, go, Loading, scoreColor, topicName, useApp, useAsync, useRoute } from '../../ui/kit';
 import { ClassView } from './ClassView';
 import { Assignments, Report } from './Report';
 import { Appeals } from './Appeals';
@@ -96,6 +96,7 @@ export function ClassWorkspace({
   const announcements = data?.announcements ?? [];
   const weakGroups = weakData?.weakGroups ?? [];
   const reviewSummary = reviewData?.classes?.[0] ?? null;
+  const [showAllOverdue, setShowAllOverdue] = useState(false);
   const overdueStudents = useMemo(
     () =>
       (reviewSummary?.students ?? [])
@@ -223,97 +224,25 @@ export function ClassWorkspace({
       {activeTab === 'overview' && (
         <div className="cls-overview-grid">
           <div className="cls-overview-main">
-            {/* 4 KPI Cards matching Student Overview */}
-            <div className="cls-kpi-grid">
-              <div className="cls-kpi-card">
-                <div className="cls-kpi-icon is-primary">
-                  <Users size={18} />
-                </div>
-                <div>
-                  <div className="cls-kpi-label">Sĩ số lớp</div>
-                  <div className="cls-kpi-value tabular-nums">{students.length}</div>
-                  <div className="cls-kpi-hint">Khối {cls.grade} · {modules.length} học phần</div>
-                </div>
-              </div>
-
-              <div className="cls-kpi-card">
-                <div className="cls-kpi-icon is-warn">
-                  <Clock size={18} />
-                </div>
-                <div>
-                  <div className="cls-kpi-label">Bài đang mở</div>
-                  <div className="cls-kpi-value tabular-nums">{stats.openAll.length}</div>
-                  <div className="cls-kpi-hint">{assignments.length} bài đã giao</div>
-                </div>
-              </div>
-
-              <div className="cls-kpi-card">
-                <div className="cls-kpi-icon is-good">
-                  <CheckCircle2 size={18} />
-                </div>
-                <div>
-                  <div className="cls-kpi-label">Tỷ lệ nộp TB</div>
-                  <div className="cls-kpi-value tabular-nums">
-                    {stats.submitRate !== null ? `${stats.submitRate}%` : 'Chưa có'}
-                  </div>
-                  <div className="cls-kpi-hint">
-                    {stats.avgClassScore !== null ? `Điểm TB lớp: ${fmtScore(stats.avgClassScore)} đ` : 'Chưa có bài chấm'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="cls-kpi-card">
-                <div className="cls-kpi-icon is-soft">
-                  <AlertTriangle size={18} />
-                </div>
-                <div>
-                  <div className="cls-kpi-label">Cần chú ý</div>
-                  <div className="cls-kpi-value tabular-nums">
-                    {(data?.appealsCount ?? 0) + weakGroups.length}
-                  </div>
-                  <div className="cls-kpi-hint">
-                    {data?.appealsCount ?? 0} khiếu nại · {weakGroups.length} chuyên đề yếu
-                  </div>
-                </div>
-              </div>
+            {/* Số liệu gọn trên một dòng */}
+            <div className="su-stats" aria-label="Số liệu lớp">
+              <span className="su-stat">Sĩ số <b>{students.length}</b></span>
+              <span className={`su-stat ${stats.openAll.length ? 'is-warn' : ''}`}>Bài đang mở <b>{stats.openAll.length}</b></span>
+              <span className="su-stat">Tỉ lệ nộp <b>{stats.submitRate !== null ? `${stats.submitRate}%` : '—'}</b></span>
+              <span className="su-stat">
+                Điểm TB{' '}
+                <b style={{ color: stats.avgClassScore !== null ? scoreColor(stats.avgClassScore) : undefined }}>
+                  {stats.avgClassScore !== null ? fmtScore(stats.avgClassScore) : '—'}
+                </b>
+              </span>
+              {(data?.appealsCount ?? 0) > 0 && (
+                <button type="button" className="su-stat is-warn" style={{ cursor: 'pointer' }} onClick={() => { setResultTab('appeals'); setActiveTab('grades'); }}>
+                  Khiếu nại <b>{data?.appealsCount}</b>
+                </button>
+              )}
+              {weakGroups.length > 0 && <span className="su-stat is-warn">Chuyên đề yếu <b>{weakGroups.length}</b></span>}
+              {overdueStudents.length > 0 && <span className="su-stat is-warn">Quá hạn ôn <b>{overdueStudents.length}</b> em</span>}
             </div>
-
-            {/* Priority Alerts & 1-Click Actions */}
-            <section className="cls-focus-card" aria-label="Cần xử lý ưu tiên">
-              <div className="cls-focus-body">
-                <span className="cls-focus-kicker">
-                  <Sparkles size={13} /> Điều phối lớp học thông minh
-                </span>
-                <h2 className="cls-focus-title">
-                  {weakGroups.length > 0
-                    ? `Chuyên đề cần củng cố: ${weakGroups[0].topicName}`
-                    : 'Giao bài kiểm tra hoặc thêm học phần tuần mới'}
-                </h2>
-                <p className="cls-focus-sub">
-                  {weakGroups.length > 0
-                    ? `${weakGroups[0].count} học sinh đạt mức nắm vững ${Math.round(weakGroups[0].avgMastery * 100)}%. Giao ngay đề củng cố 5 câu để bù hổng kiến thức.`
-                    : `Lớp ${cls.name} hiện có ${modules.length} học phần và ${assignments.length} bài giao.`}
-                </p>
-              </div>
-
-              <div className="row wrap" style={{ gap: 8 }}>
-                <button
-                  type="button"
-                  className="cls-btn cls-btn-primary"
-                  disabled={busyAction}
-                  onClick={() => assignRemedial5Q(weakGroups[0]?.topic)}
-                >
-                  <Plus size={15} /> Giao bài củng cố 5 câu
-                </button>
-                <button
-                  type="button"
-                  className="cls-btn cls-btn-ghost"
-                  onClick={() => setActiveTab('modules')}
-                >
-                  <Layers size={15} /> Học phần
-                </button>
-              </div>
-            </section>
 
             {/* Weak Topics & Action Recommendations */}
             {(weakGroups.length > 0 || (data?.actions?.length ?? 0) > 0) && (
@@ -322,11 +251,21 @@ export function ClassWorkspace({
                   <h2>Nhóm chuyên đề cần hỗ trợ</h2>
                   <div className="row" style={{ gap: 10, alignItems: 'center' }}>
                     {weakGroups.length > 0 && (
-                      <a
+                      <button
+                        type="button"
                         className="cls-btn cls-btn-sm cls-btn-primary"
+                        disabled={busyAction}
+                        onClick={() => assignRemedial5Q(weakGroups[0]?.topic)}
+                      >
+                        <Plus size={13} /> Giao củng cố 5 câu
+                      </button>
+                    )}
+                    {weakGroups.length > 0 && (
+                      <a
+                        className="cls-btn cls-btn-sm cls-btn-ghost"
                         href={`#/ra-de?classId=${id}&topics=${encodeURIComponent(weakGroups.slice(0, 3).map((w) => w.topic).join(','))}&title=${encodeURIComponent(`Đề ôn tập củng cố - ${cls.name}`)}`}
                       >
-                        <Plus size={13} /> Tạo đề ôn lỗ hổng
+                        Soạn đề ôn
                       </a>
                     )}
                     <button
@@ -420,7 +359,7 @@ export function ClassWorkspace({
                 </div>
               ) : (
                 <div className="cls-todo-list">
-                  {overdueStudents.slice(0, 6).map((st) => (
+                  {overdueStudents.slice(0, showAllOverdue ? overdueStudents.length : 3).map((st) => (
                     <div key={st.id} className="cls-todo-row">
                       <div className="cls-todo-left">
                         <div className="cls-todo-title">
@@ -445,6 +384,11 @@ export function ClassWorkspace({
                       </div>
                     </div>
                   ))}
+                  {overdueStudents.length > 3 && (
+                    <button type="button" className="cls-text-link" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => setShowAllOverdue((v) => !v)}>
+                      {showAllOverdue ? 'Thu gọn' : `Xem thêm ${overdueStudents.length - 3} em`}
+                    </button>
+                  )}
                 </div>
               )}
             </section>

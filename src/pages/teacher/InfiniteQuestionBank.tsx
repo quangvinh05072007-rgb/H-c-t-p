@@ -36,10 +36,14 @@ const LEVEL_LABEL: Record<number, string> = {
 
 export function InfiniteQuestionBank({
   onEdit,
+  onHistory,
+  onDiscuss,
   onCreateExamFromIds,
   classId = null,
 }: {
   onEdit?: (q: QuestionItem) => void;
+  onHistory?: (id: number) => void;
+  onDiscuss?: (id: number) => void;
   onCreateNew?: () => void;
   onCreateExamFromIds?: (ids: number[]) => void;
   classId?: number | null;
@@ -47,6 +51,7 @@ export function InfiniteQuestionBank({
   const { meta, toast } = useApp();
 
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
@@ -269,6 +274,21 @@ export function InfiniteQuestionBank({
           ))}
         </select>
 
+        <button
+          type="button"
+          className={`btn sm ${showMoreFilters || grade || type || level || status !== 'all' ? 'primary' : ''}`}
+          aria-expanded={showMoreFilters}
+          onClick={() => setShowMoreFilters((v) => !v)}
+        >
+          Lọc{[grade, type, level, status !== 'all' ? status : ''].filter(Boolean).length ? ` (${[grade, type, level, status !== 'all' ? status : ''].filter(Boolean).length})` : ''}
+        </button>
+        <span className="tiny muted tabular-nums" style={{ marginLeft: 'auto' }}>
+          {questions.length}/{totalCount} câu
+        </span>
+      </div>
+
+      {showMoreFilters && (
+        <div className="teacher-filter-bar">
         <select
           className="input"
           value={grade}
@@ -282,7 +302,7 @@ export function InfiniteQuestionBank({
           <option value="10">Khối 10</option>
         </select>
 
-        <select
+          <select
           className="input"
           value={type}
           onChange={(e) => setType(e.target.value)}
@@ -295,7 +315,7 @@ export function InfiniteQuestionBank({
           <option value="short">Trả lời ngắn</option>
         </select>
 
-        <select
+          <select
           className="input"
           value={level}
           onChange={(e) => setLevel(e.target.value)}
@@ -308,7 +328,7 @@ export function InfiniteQuestionBank({
           <option value="3">Vận dụng</option>
         </select>
 
-        <select
+          <select
           className="input"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
@@ -319,11 +339,8 @@ export function InfiniteQuestionBank({
           <option value="approved">Đã duyệt</option>
           <option value="draft">Bản nháp</option>
         </select>
-
-        <span className="tiny muted tabular-nums" style={{ marginLeft: 'auto' }}>
-          {questions.length}/{totalCount} câu
-        </span>
-      </div>
+        </div>
+      )}
 
       {/* Multi-Select & Batch Action Bar */}
       <div className="teacher-batch-bar">
@@ -398,7 +415,7 @@ export function InfiniteQuestionBank({
       </div>
 
       {/* Questions Stream */}
-      <div className="stack" style={{ gap: 10 }}>
+      <div className="su-card su-bank-list">
         {questions.map((q) => {
           const isPreview = previewQuestion?.id === q.id;
           const isChecked = selectedIds.includes(q.id);
@@ -406,83 +423,31 @@ export function InfiniteQuestionBank({
           return (
             <div
               key={q.id}
-              className="card flat"
-              style={{
-                borderRadius: 12,
-                border: `1px solid ${isChecked || isPreview ? 'var(--primary)' : 'var(--line)'}`,
-                padding: '14px 18px',
-                background: isChecked ? '#f0f7ff' : isPreview ? 'var(--surface-subtle)' : '#ffffff',
-                cursor: 'pointer',
-              }}
+              className={`su-bank-row ${isChecked ? 'is-checked' : ''} ${isPreview ? 'is-preview' : ''}`}
               onClick={() => setPreviewQuestion(q)}
             >
-              <div className="row between" style={{ gap: 8, marginBottom: 8, alignItems: 'center' }}>
-                <div className="meta-inline-line" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={() => toggleSelect(q.id)}
-                    aria-label={`Chọn câu #${q.id}`}
-                    style={{ marginRight: 2 }}
-                  />
-                  <span className="tabular-nums" style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--ink)' }}>
-                    #{q.id}
-                  </span>
-                  <span>·</span>
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onClick={(e) => e.stopPropagation()}
+                onChange={() => toggleSelect(q.id)}
+                aria-label={`Chọn câu #${q.id}`}
+              />
+              <div className="su-row-main">
+                <div className="su-bank-stem"><MathText text={q.stem.replace(/\[\[img:\d+\]\]/g, '[hình]').replace(/\s+/g, ' ')} /></div>
+                <div className="su-row-meta">
+                  <span className="tabular-nums">#{q.id}</span>
+                  <span className={`su-chip ${q.status === 'approved' ? 'is-good' : 'is-warn'}`}>{q.status === 'approved' ? 'Đã duyệt' : 'Nháp'}</span>
                   <span>{TYPE_LABEL[q.type] || q.type}</span>
-                  <span>·</span>
-                  <span>{LEVEL_LABEL[q.level] || `Mức ${q.level}`}</span>
-                  <span>·</span>
-                  <span style={{ color: q.status === 'approved' ? 'var(--good)' : '#b45309', fontWeight: 600 }}>
-                    {q.status === 'approved' ? 'Đã duyệt' : 'Bản nháp'}
-                  </span>
-                  <span>·</span>
-                  <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{topicName(meta, q.topic)}</span>
-                </div>
-
-                <div className="row" style={{ gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    className="btn ghost sm"
-                    onClick={() => setPreviewQuestion(q)}
-                  >
-                    Xem giải
-                  </button>
-                  {onEdit && (
-                    <button
-                      type="button"
-                      className="btn ghost sm"
-                      onClick={() => onEdit(q)}
-                    >
-                      Sửa
-                    </button>
-                  )}
+                  <span>· {LEVEL_LABEL[q.level] || `Mức ${q.level}`}</span>
+                  <span>· {topicName(meta, q.topic)}</span>
                 </div>
               </div>
-
-              <div style={{ fontSize: 15, lineHeight: 1.5 }}>
-                <MathText as="div" text={q.stem} />
+              <div className="su-bank-actions" onClick={(e) => e.stopPropagation()}>
+                {onEdit && <button type="button" className="btn ghost sm" onClick={() => onEdit(q)}>Sửa</button>}
+                {onHistory && <button type="button" className="btn ghost sm" onClick={() => onHistory(q.id)}>Lịch sử</button>}
+                {onDiscuss && <button type="button" className="btn ghost sm" onClick={() => onDiscuss(q.id)}>Góp ý</button>}
               </div>
-
-              {q.type === 'mcq' && q.options?.length > 0 && (
-                <div className="grid-2 mt" style={{ gap: 6 }}>
-                  {q.options.map((opt, optIdx) => {
-                    const isAns = q.answer === optIdx;
-                    return (
-                      <div
-                        key={optIdx}
-                        className="small"
-                        style={{
-                          color: isAns ? 'var(--good)' : 'var(--ink-2)',
-                          fontWeight: isAns ? 700 : 400,
-                        }}
-                      >
-                        <b>{'ABCD'[optIdx]}.</b> <MathText text={opt} />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           );
         })}

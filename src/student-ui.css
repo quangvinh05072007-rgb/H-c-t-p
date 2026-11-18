@@ -1214,3 +1214,46 @@
   width: 100%;
   border-radius: 6px;
 }
+
+/* ---- Ngân hàng câu hỏi: mỗi câu một dòng ---- */
+.su-bank-list {
+  padding: 4px 12px;
+}
+.su-bank-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 6px;
+  border-top: 1px solid var(--line-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.su-bank-row:first-child {
+  border-top: 0;
+}
+.su-bank-row:hover,
+.su-bank-row.is-preview {
+  background: var(--surface-2);
+}
+.su-bank-row.is-checked {
+  background: var(--primary-subtle);
+}
+.su-bank-stem {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.su-bank-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+@media (max-width: 640px) {
+  .su-bank-actions {
+    display: none;
+  }
+}
