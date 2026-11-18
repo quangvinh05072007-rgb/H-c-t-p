@@ -1068,3 +1068,9 @@
   .su-time-label { width: 78px; }
   .su-time-sec { width: 72px; }
 }
+
+/* Khung lời giải: theo màu chủ đạo thay cho xanh dương cũ */
+.explain {
+  background: var(--primary-subtle);
+  border-color: var(--primary-soft);
+}

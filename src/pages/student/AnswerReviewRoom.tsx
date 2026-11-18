@@ -17,6 +17,7 @@ import {
   Loading,
   Modal,
   scoreColor,
+  topicName,
   useApp,
   useAsync,
 } from '../../ui/kit';
@@ -71,7 +72,7 @@ const STATUS_META: Record<QuestionStatus, { label: string; badgeClass: string }>
 };
 
 export function AnswerReviewRoom({ attemptId }: { attemptId: number }) {
-  const { toast } = useApp();
+  const { toast, meta } = useApp();
   const { data, error, loading, reload } = useAsync(
     () => get<any>(`/api/attempts/${attemptId}/result`),
     [attemptId],
@@ -145,6 +146,18 @@ export function AnswerReviewRoom({ attemptId }: { attemptId: number }) {
       setEditingNoteQid(null);
     }
   };
+
+  // Lần đầu mở: ưu tiên xem câu chưa đúng
+  const [autoFocused, setAutoFocused] = useState(false);
+  useEffect(() => {
+    if (autoFocused || !items.length || !r) return;
+    setAutoFocused(true);
+    if (counts.notRight > 0 && counts.notRight < items.length) {
+      setFilter('wrong');
+      const first = items.findIndex((it) => getQuestionStatus(byQ[it.qid]) !== 'right');
+      if (first >= 0) setCurIdx(first);
+    }
+  }, [autoFocused, items, r, counts.notRight, byQ]);
 
   const posInFiltered = filteredIndices.indexOf(curIdx);
   const activeItem =
@@ -418,7 +431,7 @@ export function AnswerReviewRoom({ attemptId }: { attemptId: number }) {
                   {activeItem.topic && (
                     <>
                       <span className="academic-sep" aria-hidden="true">·</span>
-                      <span className="question-topic-label">{activeItem.topic}</span>
+                      <span className="question-topic-label">{topicName(meta, activeItem.topic)}</span>
                     </>
                   )}
                 </div>
@@ -427,6 +440,12 @@ export function AnswerReviewRoom({ attemptId }: { attemptId: number }) {
                   <span className={`badge ${STATUS_META[activeStatus].badgeClass}`}>
                     {STATUS_META[activeStatus].label}
                   </span>
+                  {Number(data?.times?.[activeItem.qid]) > 0 && (
+                    <span className="su-chip" title="Thời gian em làm câu này">
+                      {Math.floor(data.times[activeItem.qid] / 60) > 0 ? `${Math.floor(data.times[activeItem.qid] / 60)} phút ` : ''}
+                      {Math.round(data.times[activeItem.qid] % 60)} giây
+                    </span>
+                  )}
                   {activeEntry?.grade && (
                     <span className="small strong tabular-nums" style={{ color: 'var(--ink-2)' }}>
                       {(activeEntry.grade.points / 1000).toLocaleString('vi-VN')} /{' '}
@@ -474,7 +493,6 @@ export function AnswerReviewRoom({ attemptId }: { attemptId: number }) {
                       ? {
                           correctAnswer: activeEntry.correctAnswer,
                           explanation: activeEntry.explanation,
-                          source: activeEntry.source,
                           grade: activeEntry.grade,
                           diagnosis: activeEntry.diagnosis,
                         }
@@ -550,7 +568,7 @@ export function AnswerReviewRoom({ attemptId }: { attemptId: number }) {
                     }}
                   >
                     <BookmarkPlus size={14} />
-                    <span>{activeNote ? 'Sửa Note lỗi sai' : 'Lưu Note vào Sổ tay'}</span>
+                    <span>{activeNote ? 'Sửa ghi chú' : 'Ghi chú vào Sổ tay'}</span>
                   </button>
                   {data.kind !== 'practice' && (
                     <button
