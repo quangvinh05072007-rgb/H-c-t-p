@@ -4,12 +4,18 @@
 
 import { cleanCategory, EXAM_CATEGORY_CODES } from './examCategory.mjs';
 import { TOPIC_BY_CODE } from './topics.mjs';
+import { repairPackageText, restoreControlChars } from './packageRepair.mjs';
 
 export const PACKAGE_FORMAT = 'smartexam-package';
 export const PACKAGE_VERSION = 1;
 export const PACKAGE_LIMITS = { questions: 2000, exams: 100, lessons: 200, textLength: 20000 };
 
 const TYPES = new Set(['mcq', 'tf', 'short']);
+/** Dấu AI ghi khi tự giải (đề không có đáp án): câu đó luôn vào dạng nháp chờ giáo viên duyệt. */
+export const AI_SOLVED_RE = /\[\s*AI\s+tự\s+giải[^\]]*\]\s*/iu;
+/** Nhãn phương án AI hay chép theo: "A." "B)" ở trắc nghiệm, "a)" "b." ở đúng/sai. */
+const MCQ_LABEL_RE = /^\s*\(?[A-D]\s*[.):]\s*/;
+const TF_LABEL_RE = /^\s*\(?[a-d]\s*[.):]\s*/;
 const IMAGE_RE = /\[\[image:([^\]\n]+)\]\]/g;
 
 /** Đáp án trắc nghiệm: "A".."D" hoặc 0..3 → 0..3. */
@@ -28,8 +34,12 @@ function tfAnswer(v) {
   return out.every((x) => x !== null) ? out : null;
 }
 
+let controlFixes = 0;
 function text(v) {
-  return typeof v === 'string' ? v.trim() : v === null || v === undefined ? '' : String(v).trim();
+  const s = typeof v === 'string' ? v.trim() : v === null || v === undefined ? '' : String(v).trim();
+  const r = restoreControlChars(s);
+  controlFixes += r.fixes;
+  return r.text;
 }
 
 /** Tên hình được nhắc trong văn bản qua [[image:ten.png]]. */
@@ -46,15 +56,19 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
   const warnings = [];
   let pkg = raw;
   if (typeof raw === 'string' || (typeof Buffer !== 'undefined' && Buffer.isBuffer(raw))) {
+    // Tự sửa lỗi cú pháp AI hay mắc (``` bao quanh, \frac một dấu \) rồi mới đọc
+    const fixed = repairPackageText(String(raw));
     try {
-      pkg = JSON.parse(String(raw).replace(/^﻿/, ''));
+      pkg = JSON.parse(fixed.text);
+      warnings.push(...fixed.notes);
     } catch (e) {
-      return { source: '', questions: [], exams: [], lessons: [], errors: [{ where: 'Gói', message: `File JSON không hợp lệ: ${e.message}` }], warnings };
+      return { source: '', questions: [], exams: [], lessons: [], errors: [{ where: 'Gói', message: `Không đọc được JSON: ${e.message}. Kiểm tra AI đã trả về đủ khối { … } chưa (có bị cắt giữa chừng không).` }], warnings };
     }
   }
   if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) {
     return { source: '', questions: [], exams: [], lessons: [], errors: [{ where: 'Gói', message: 'Gói phải là một đối tượng JSON.' }], warnings };
   }
+  controlFixes = 0;
   if (pkg.format !== PACKAGE_FORMAT) errors.push({ where: 'Gói', message: `Thiếu "format": "${PACKAGE_FORMAT}".` });
   if (Number(pkg.version) !== PACKAGE_VERSION) errors.push({ where: 'Gói', message: `Phiên bản gói phải là ${PACKAGE_VERSION}.` });
   if (errors.length) return { source: '', questions: [], exams: [], lessons: [], errors, warnings };
@@ -78,6 +92,7 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
   // ---- Câu hỏi ----
   const questions = [];
   const seenIds = new Set();
+  let labelFixes = 0;
   rawQs.forEach((q, i) => {
     const key = text(q?.id) || `#${i + 1}`;
     const where = `Câu ${key}`;
@@ -96,6 +111,11 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
     let answer = null;
     if (type === 'mcq' || type === 'tf') {
       options = Array.isArray(q.options) ? q.options.map(text) : [];
+      const labelRe = type === 'mcq' ? MCQ_LABEL_RE : TF_LABEL_RE;
+      if (options.length === 4 && options.every((o) => labelRe.test(o))) {
+        options = options.map((o) => o.replace(labelRe, ''));
+        labelFixes++;
+      }
       if (options.length !== 4 || options.some((o) => !o)) problems.push(type === 'mcq' ? 'cần đủ 4 phương án A–D' : 'cần đủ 4 ý a)–d)');
       answer = type === 'mcq' ? mcqAnswer(q.answer) : tfAnswer(q.answer);
       if (answer === null) problems.push(type === 'mcq' ? '"answer" phải là A, B, C hoặc D' : '"answer" phải gồm 4 giá trị Đúng/Sai, ví dụ "ĐĐSS"');
@@ -103,7 +123,9 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
       answer = text(q.answer);
       if (!answer) problems.push('thiếu "answer"');
     }
-    const explanation = text(q.explanation);
+    let explanation = text(q.explanation);
+    const needsReview = q.review === true || AI_SOLVED_RE.test(explanation) || AI_SOLVED_RE.test(stem);
+    explanation = explanation.replace(AI_SOLVED_RE, '').trim();
     if (tooLong(stem, explanation, ...options)) problems.push('nội dung quá dài');
     problems.push(...checkImages(where, stem, explanation, ...options));
     seenIds.add(key);
@@ -119,6 +141,7 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
       level,
       group_id: text(q.group) ? text(q.group).slice(0, 40) : null,
       form: text(q.form).slice(0, 60) || null,
+      needsReview,
     });
   });
 
@@ -141,9 +164,9 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
     if (!(durationMin >= 5 && durationMin <= 240)) problems.push('"durationMin" phải từ 5 đến 240');
     const variants = Math.round(Number(e?.variants ?? 4));
     if (!(variants >= 1 && variants <= 24)) problems.push('"variants" phải từ 1 đến 24');
-    if (problems.length) return errors.push({ where, message: problems.join('; ') + '.' });
     const category = e?.category == null || e.category === '' ? null : cleanCategory(e.category);
     if (e?.category && !category) problems.push(`"category" phải là một trong: ${EXAM_CATEGORY_CODES.join(', ')}`);
+    if (problems.length) return errors.push({ where, message: problems.join('; ') + '.' });
     exams.push({ title, keys, durationMin, variants, category, shareWithSchool: e?.shareWithSchool !== false });
   });
 
@@ -176,8 +199,12 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
     lessons.push({ topic, entry });
   });
 
+  if (labelFixes) warnings.push(`Đã bỏ nhãn "A." / "a)" thừa ở phương án của ${labelFixes} câu.`);
+  if (controlFixes) warnings.push(`Đã khôi phục ${controlFixes} lệnh công thức bị hỏng do thiếu dấu \\.`);
+  const aiSolved = questions.filter((q) => q.needsReview).length;
+  if (aiSolved) warnings.push(`${aiSolved} câu do AI tự giải: sẽ lưu ở dạng nháp để giáo viên kiểm tra đáp án rồi duyệt.`);
   if (!imageNames.size && [...questions, ...lessons].length && rawQs.concat(rawLessons).some((x) => JSON.stringify(x ?? '').includes('[[image:'))) {
-    warnings.push('Gói có nhắc hình nhưng không kèm file hình: hãy nén JSON cùng thư mục hình thành .zip.');
+    warnings.push('Gói có chỗ đặt hình nhưng chưa kèm hình: đính kèm file Word gốc để app tự lấy hình, hoặc dán ảnh chụp vào từng hình còn thiếu.');
   }
   return { source, questions, exams, lessons, errors, warnings };
 }

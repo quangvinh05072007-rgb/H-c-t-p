@@ -16,7 +16,10 @@ import { generateExam, imageOptions, apportion, makeVariant, makeVariants, varia
 import { diagnoseAttempt, diagnoseItem, computeMastery, recommend, selectPractice } from '../shared/diagnose.mjs';
 import { examToDocx, crossAnswerKey } from '../shared/exportExam.mjs';
 import { examToPdf } from '../shared/exportExamPdf.mjs';
-import { sniffImage } from '../shared/docx.mjs';
+import { sniffImage, readDocx } from '../shared/docx.mjs';
+import { mapDocxImages } from '../shared/docxImageMap.mjs';
+import { buildAiPrompt } from '../shared/aiPrompt.mjs';
+import { repairPackageText } from '../shared/packageRepair.mjs';
 import { cleanCategory, examCategory, CATEGORY_LABEL } from '../shared/examCategory.mjs';
 import { buildInsights } from '../shared/insights.mjs';
 import { exportAnswerSheetDocx } from '../shared/exportAnswerSheetDocx.mjs';
@@ -1166,7 +1169,7 @@ export function createApp(config = {}) {
     const ext = String(name).toLowerCase().split('.').pop();
     if (!raw?.length) fail(400, 'File gói trống.');
     if (raw.length > 50 * 1024 * 1024) fail(400, 'Gói tối đa 50 MB.');
-    if (ext === 'json') return { json: raw.toString('utf8'), images: {} };
+    if (ext === 'json') return { json: raw.toString('utf8'), images: {}, rejected: {}, docx: null };
     if (ext !== 'zip') fail(400, 'Gói nhập phải là file .json hoặc .zip.');
     let zip;
     try {
@@ -1198,7 +1201,17 @@ export function createApp(config = {}) {
       images[rel] = { data, mime: sniffed };
       if (!images[bare]) images[bare] = images[rel];
     }
-    return { json: await jsonFile.async('string'), images, rejected };
+    // File Word gốc đi kèm (nếu có): hình thật nằm sẵn trong đó
+    let docx = null;
+    const docxFile = files.find((f) => /\.docx$/i.test(f.name));
+    if (docxFile) {
+      try {
+        docx = await readDocx(await docxFile.async('nodebuffer'));
+      } catch {
+        fail(400, 'File Word gốc đi kèm không đọc được. Hãy mở bằng Word và lưu lại dạng .docx.');
+      }
+    }
+    return { json: await jsonFile.async('string'), images, rejected, docx };
   }
   function packageSummary(p) {
     return {
@@ -1211,13 +1224,50 @@ export function createApp(config = {}) {
       warnings: p.warnings,
     };
   }
+  // Lời nhắc cho AI bên ngoài, kèm dạng toán trường đang dùng để tên dạng luôn thống nhất
+  route('GET', '/api/import/ai-prompt', STAFF, ({ user, query }) => {
+    const rows = db.all(
+      "SELECT topic, form, COUNT(*) n FROM questions WHERE school_id = ? AND form IS NOT NULL AND form != '' AND status != 'archived' GROUP BY topic, form ORDER BY topic, n DESC",
+      user.school_id,
+    );
+    const forms = {};
+    for (const r of rows) if ((forms[r.topic] ??= []).length < 15) forms[r.topic].push(r.form);
+    return { text: buildAiPrompt({ mode: query.mode === 'code' ? 'code' : 'text', forms }) };
+  });
   route('GET', '/api/import/package-sample.json', STAFF, () => ({
     __file: { name: 'goi-nhap-mau.json', type: 'application/json; charset=utf-8', data: Buffer.from(JSON.stringify(samplePackage(), null, 2), 'utf8') },
   }));
   route('POST', '/api/import/package', STAFF, async ({ user, raw, query, ip }) => {
     const filename = String(query.filename ?? 'goi.json');
-    const { json, images, rejected } = await readPackage(filename, raw);
+    const { json, images, rejected, docx } = await readPackage(filename, raw);
+    const notes = [];
+    if (docx) {
+      let rawQs = [];
+      try {
+        rawQs = JSON.parse(repairPackageText(json).text)?.questions ?? [];
+      } catch {
+        rawQs = [];
+      }
+      const m = mapDocxImages(rawQs, docx.text, new Set(Object.keys(images)));
+      const byKey = Object.fromEntries(docx.images.map((im) => [im.key, im]));
+      let got = 0;
+      for (const [name, key] of Object.entries(m.assign)) {
+        const im = byKey[key];
+        if (!im) continue;
+        if (im.mime !== 'image/png' && im.mime !== 'image/jpeg') {
+          rejected[name] = 'lấy từ file Word nhưng là dạng không in được (GIF/WebP): hãy thay bằng PNG/JPG';
+          continue;
+        }
+        images[name] = { data: Buffer.from(im.data), mime: im.mime };
+        got++;
+      }
+      notes.push(got ? `Đã lấy ${got} hình từ file Word gốc.` : 'File Word gốc không có hình nào khớp với các câu cần hình.', ...m.warnings);
+      if (docx.stats?.skippedImages || docx.stats?.unreadableImages) {
+        notes.push(`File Word có ${(docx.stats.skippedImages ?? 0) + (docx.stats.unreadableImages ?? 0)} hình không lấy được (hình vẽ bằng công cụ Word, EMF/WMF): các câu đó cần dán hình chụp.`);
+      }
+    }
     const p = parsePackage(json, new Set(Object.keys(images)), rejected);
+    p.warnings.unshift(...notes);
     const dryRun = query.dryRun === '1' || query.dryRun === 'true';
     if (dryRun) {
       // Câu gần trùng với ngân hàng (giống ≥ 75%): báo trước để người nhập xem lại; câu trùng hệt sẽ tự bỏ qua khi nhập
@@ -1227,7 +1277,26 @@ export function createApp(config = {}) {
         const hit = idx.findDuplicates(q.stem, { threshold: 0.75, limit: 1 })[0];
         if (hit) duplicates.push({ key: q.key, id: hit.id, score: Math.round(hit.score * 100), exact: hit.score >= 0.99 });
       }
-      return { dryRun: true, ...packageSummary(p), duplicates };
+      const imageData = {};
+      let bytes = 0;
+      for (const q of p.questions.slice(0, 300)) {
+        for (const f of [q.stem, ...q.options, q.explanation]) {
+          for (const mm of String(f ?? '').matchAll(/\[\[image:([^\]\n]+)\]\]/g)) {
+            const name = mm[1].trim();
+            const im = images[name];
+            if (!im || imageData[name] || bytes > 12 * 1024 * 1024) continue;
+            bytes += im.data.length;
+            imageData[name] = `data:${im.mime};base64,${Buffer.from(im.data).toString('base64')}`;
+          }
+        }
+      }
+      // Tên hình còn thiếu: để giáo viên dán ảnh chụp vào đúng chỗ
+      const missingImages = [...new Set(p.errors.flatMap((e) => [...String(e.message).matchAll(/thiếu hình ([^;]+?) trong gói/g)].map((x) => x[1].trim())))];
+      const preview = p.questions.slice(0, 300).map((q) => ({
+        key: q.key, type: q.type, stem: q.stem, options: q.options, answer: q.answer, explanation: q.explanation,
+        topic: q.topic, topicName: TOPIC_BY_CODE[q.topic]?.name ?? q.topic, level: q.level, form: q.form, needsReview: q.needsReview,
+      }));
+      return { dryRun: true, ...packageSummary(p), duplicates, preview, imageData, missingImages };
     }
     if (!p.questions.length && !p.lessons.length) fail(400, p.errors[0]?.message ?? 'Gói không có mục hợp lệ để nhập.');
 
@@ -1257,7 +1326,8 @@ export function createApp(config = {}) {
           skipped++;
           continue;
         }
-        const status = canApprove ? 'approved' : 'draft';
+        // Câu AI tự giải (không có đáp án gốc) luôn vào nháp, kể cả khi chọn Duyệt luôn
+        const status = canApprove && !q.needsReview ? 'approved' : 'draft';
         const id = insertQuestion(user, {
           type: q.type,
           stem,

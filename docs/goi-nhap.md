@@ -7,6 +7,8 @@ riêng, hay dùng AI ở máy của bạn) rồi đưa vào app bằng một **g
 - Có hình → một file **`.zip`** chứa `goi.json` và các file hình **`.png` hoặc `.jpg`** (mỗi hình ≤ 5 MB). Hình WebP, GIF, HEIC không được nhận vì không in ra PDF/Word được — hãy lưu lại dạng PNG/JPG.
 - Cả gói tối đa 50 MB, 2000 câu, 100 đề, 200 bài học.
 
+Dùng AI để tạo gói: xem quy trình và lời nhắc mẫu ở [huong-dan-ai.md](huong-dan-ai.md).
+
 Nhập ở **Nhập đề → Gói nhập chuẩn**. App **kiểm tra trước** (không ghi gì), báo lỗi theo từng mục; mục lỗi bị bỏ qua, mục
 đúng vẫn nhập được. Tải gói mẫu ở cùng chỗ (nút *Tải gói mẫu*).
 
@@ -42,7 +44,7 @@ Nhập ở **Nhập đề → Gói nhập chuẩn**. App **kiểm tra trước**
 
 **Công thức** viết LaTeX giữa hai dấu `$`, vd `$\int_0^1 2x\,dx$`. Trong JSON phải nhân đôi dấu `\`: `"$\\int_0^1 2x\\,dx$"`.
 
-**Hình**: chèn `[[image:hinh/cau3.png]]` vào `stem`, `options` hoặc `explanation`; đường dẫn tính từ chỗ đặt `goi.json` trong `.zip`.
+**Hình**: chèn `[[image:hinh/c3.png]]` vào `stem`, `options` hoặc `explanation`; đường dẫn tính từ chỗ đặt `goi.json` trong `.zip`.
 
 **Bảng**: mỗi dòng dạng `| a | b | c |`.
 

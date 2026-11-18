@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Gói nhập chuẩn SmartExam",
+  "description": "Câu hỏi, đề thi và bài học Toán THPT để nhập vào SmartExam. Đặc tả: docs/goi-nhap.md.",
+  "type": "object",
+  "required": ["format", "version", "questions"],
+  "properties": {
+    "format": { "const": "smartexam-package" },
+    "version": { "const": 1 },
+    "source": { "type": "string", "maxLength": 200, "description": "Đơn vị – Kỳ thi – Lần – Năm" },
+    "questions": {
+      "type": "array",
+      "maxItems": 2000,
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "topic", "level", "stem", "answer"],
+        "properties": {
+          "id": { "type": "string", "description": "c1, c2, … theo thứ tự trong đề" },
+          "type": { "enum": ["mcq", "tf", "short"] },
+          "topic": {
+            "enum": [
+              "T10.MENHDE", "T10.BPT2AN", "T10.HTL", "T10.VECTO", "T10.HAMBAC2", "T10.TOADOOXY", "T10.TOHOP", "T10.THONGKE",
+              "T11.LUONGGIAC", "T11.DAYSO", "T11.GHEPNHOM", "T11.SONGSONG", "T11.GIOIHAN", "T11.MULOG", "T11.VUONGGOC", "T11.XACSUAT", "T11.DAOHAM",
+              "T12.KHAOSAT", "T12.VECTOKG", "T12.PHANTAN", "T12.NGUYENHAM", "T12.OXYZ", "T12.XSDK"
+            ]
+          },
+          "level": { "enum": [1, 2, 3], "description": "1 Biết, 2 Hiểu, 3 Vận dụng" },
+          "form": { "type": "string", "maxLength": 60, "description": "Dạng toán, tên ngắn, viết thống nhất" },
+          "stem": { "type": "string", "minLength": 1, "description": "Công thức trong $...$; hình: [[image:hinh/cauNN.png]]" },
+          "options": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "description": "mcq: 4 phương án (không có 'A.'); tf: 4 ý (không có 'a)'); short: []"
+          },
+          "answer": {
+            "description": "mcq: A–D; tf: 4 chữ Đ/S vd 'ĐĐSS'; short: số, dấu thập phân là dấu phẩy",
+            "oneOf": [
+              { "type": "string", "minLength": 1 },
+              { "type": "array", "items": { "type": "boolean" }, "minItems": 4, "maxItems": 4 }
+            ]
+          },
+          "explanation": { "type": "string" },
+          "group": { "type": "string", "maxLength": 40, "description": "Câu chùm: các câu cùng group đi liền nhau khi đảo đề" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "type": { "enum": ["mcq", "tf"] } } },
+            "then": { "required": ["options"], "properties": { "options": { "minItems": 4, "maxItems": 4 } } }
+          },
+          {
+            "if": { "properties": { "type": { "const": "mcq" } } },
+            "then": { "properties": { "answer": { "enum": ["A", "B", "C", "D"] } } }
+          },
+          {
+            "if": { "properties": { "type": { "const": "tf" } } },
+            "then": { "properties": { "answer": { "oneOf": [{ "type": "string", "pattern": "^[ĐDSTF]{4}$" }, { "type": "array" }] } } }
+          }
+        ]
+      }
+    },
+    "exams": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "required": ["title", "questions"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "category": { "enum": ["giua-ky", "cuoi-ky", "thpt", "khao-sat", "kiem-tra", "on-tap"] },
+          "durationMin": { "type": "integer", "minimum": 5, "maximum": 240 },
+          "variants": { "type": "integer", "minimum": 1, "maximum": 24 },
+          "questions": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "id các câu trong cùng gói, đúng thứ tự" },
+          "shareWithSchool": { "type": "boolean" }
+        }
+      }
+    },
+    "lessons": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "required": ["topic"],
+        "properties": {
+          "topic": { "type": "string" },
+          "summary": { "type": "string" },
+          "objectives": { "type": "array", "items": { "type": "string" } },
+          "formulas": { "type": "array", "items": { "type": "string" }, "description": "Mỗi mục 'Tiêu đề: nội dung'" },
+          "tips": { "type": "string" },
+          "traps": { "type": "array", "items": { "type": "string" } },
+          "examples": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["problem"],
+              "properties": { "title": { "type": "string" }, "problem": { "type": "string" }, "solution": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}
