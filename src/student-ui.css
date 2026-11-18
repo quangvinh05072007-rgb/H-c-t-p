@@ -1025,3 +1025,46 @@
     display: none;
   }
 }
+
+/* ---- Kết quả từng bài ---- */
+.su-score-card {
+  display: flex;
+  align-items: center;
+  gap: 16px 32px;
+  flex-wrap: wrap;
+}
+.su-score-main {
+  min-width: 180px;
+}
+.su-parts {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 20px;
+  min-width: 0;
+}
+.su-part .su-bar {
+  margin-top: 6px;
+}
+.su-time-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 12.5px;
+}
+.su-time-label {
+  width: 96px;
+  flex-shrink: 0;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.su-time-sec {
+  width: 92px;
+  text-align: right;
+  color: var(--ink-3);
+}
+@media (max-width: 640px) {
+  .su-time-label { width: 78px; }
+  .su-time-sec { width: 72px; }
+}
