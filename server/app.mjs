@@ -804,11 +804,6 @@ export function createApp(config = {}) {
     return Number(r.lastInsertRowid);
   }
 
-  route('GET', '/api/questions/:id', STAFF, ({ user, params }) => {
-    const row = db.get('SELECT * FROM questions WHERE id = ? AND school_id = ?', params.id, user.school_id);
-    if (!row) fail(404, 'Không tìm thấy câu hỏi.');
-    return { question: toQuestion(row) };
-  });
   route('POST', '/api/questions', STAFF, ({ user, body, ip }) => {
     if (!QUESTION_TYPES[body.type]) fail(400, 'Chọn loại câu: trắc nghiệm, đúng/sai hoặc trả lời ngắn.');
     const canAutoApprove = body.autoApprove === true && reviewPolicy(user.school_id) !== 'double' && validateQuestion(body).length === 0;
@@ -2723,6 +2718,12 @@ export function createApp(config = {}) {
     const data = await buildXlsx([{ name: 'Câu hỏi', columns: SHEET_HEADERS.map((h, i) => ({ header: h, width: [8, 60, 24, 24, 24, 24, 10, 16, 8, 50][i] })), rows }]);
     audit(user, 'data_export', `ngân hàng câu hỏi (Excel): ${rows.length} câu`, ip, { target: 'questions' });
     return { __file: { name: 'ngan-hang-cau-hoi.xlsx', type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', data } };
+  });
+  // Đặt sau export.xlsx để đường dẫn tĩnh được khớp trước
+  route('GET', '/api/questions/:id', STAFF, ({ user, params }) => {
+    const row = db.get('SELECT * FROM questions WHERE id = ? AND school_id = ?', params.id, user.school_id);
+    if (!row) fail(404, 'Không tìm thấy câu hỏi.');
+    return { question: toQuestion(row) };
   });
   // ---- khiếu nại điểm ----
   const APPEAL_DAYS = 14;
