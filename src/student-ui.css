@@ -1121,3 +1121,26 @@
   flex-direction: column;
   gap: 10px;
 }
+
+/* ---- Phòng thi: cùng màu chủ đạo ---- */
+.exam-submit-primary-btn {
+  background: var(--primary);
+  box-shadow: none;
+}
+.exam-submit-primary-btn:hover {
+  background: var(--primary-2);
+  box-shadow: var(--shadow-hover);
+}
+.exam-palette-toggle-btn.active,
+[data-theme='dark'] .exam-palette-toggle-btn.active {
+  background: var(--primary-subtle);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.palette-num-btn.done {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.legend-box.done {
+  background: var(--primary);
+}

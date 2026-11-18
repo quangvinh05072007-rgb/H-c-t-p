@@ -166,3 +166,25 @@ test('Giáo viên gửi Lời phê & Tem khích lệ; Giao bài củng cố 5 c�
   assert.ok(/Củng cố/i.test(remedial.data.title));
 });
 
+
+test('Câu đánh dấu khi làm bài được đưa vào Sổ tay lỗi sai, kể cả khi làm đúng, và không ghi đè ghi chú cũ', async () => {
+  const student = client();
+  assert.equal((await student('POST', '/api/login', { username: 'hs.chau.tb', password: SAMPLE_PASSWORD })).status, 200);
+  const cat = await student('GET', '/api/student/practice-exams');
+  const start = await student('POST', '/api/student/practice-exams/start', { examId: cat.data.exams[0].id });
+  assert.equal(start.status, 200);
+  const items = start.data.items;
+  const [a, b] = items;
+  // Ghi chú sẵn cho câu b: không được bị ghi đè khi nộp bài
+  const pre = await student('POST', '/api/student/mistakes/note', { qid: b.qid, note: 'ghi chú riêng', tag: 'careless' });
+  assert.equal(pre.status, 200);
+  const done = await student('POST', `/api/practice/${start.data.id}/finish`, { responses: {}, times: {}, flagged: [a.qid, b.qid, 999999] });
+  assert.equal(done.status, 200);
+  const nb = await student('GET', '/api/student/mistakes');
+  const byQ = Object.fromEntries(nb.data.mistakes.map((m) => [m.qid, m]));
+  assert.ok(byQ[a.qid], 'câu đánh dấu phải có trong Sổ tay');
+  assert.match(byQ[a.qid].note, /Đánh dấu/);
+  assert.equal(byQ[b.qid].note, 'ghi chú riêng');
+  assert.equal(byQ[b.qid].tag, 'careless');
+  assert.ok(!byQ[999999], 'không nhận câu ngoài bài làm');
+});

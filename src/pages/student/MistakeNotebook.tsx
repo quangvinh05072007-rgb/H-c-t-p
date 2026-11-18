@@ -54,6 +54,7 @@ const ERROR_LABELS: Record<string, { label: string; tone: string }> = {
   transform: { label: 'Lỗi biến đổi', tone: 'is-info' },
   careless: { label: 'Bất cẩn', tone: 'is-bad' },
   blank: { label: 'Bỏ trống', tone: '' },
+  flagged: { label: 'Đã đánh dấu', tone: 'is-info' },
 };
 
 const TYPE_LABELS: Record<MistakeItem['type'], string> = { mcq: 'Trắc nghiệm', tf: 'Đúng/Sai', short: 'Trả lời ngắn' };
@@ -270,7 +271,7 @@ export function MistakeNotebook() {
                     </span>
                     <span className="su-mistake-side">
                       {item.isDue ? <span className="su-chip is-warn">Ôn hôm nay</span> : <span className="su-chip">Hẹn {item.dueDay}</span>}
-                      <span className="su-row-meta" style={{ margin: 0 }}>Sai {item.wrongCount} lần</span>
+                      <span className="su-row-meta" style={{ margin: 0 }}>{item.wrongCount > 0 ? `Sai ${item.wrongCount} lần` : 'Chưa sai'}</span>
                     </span>
                     <ChevronDown size={16} aria-hidden="true" className="su-mistake-caret" />
                   </button>

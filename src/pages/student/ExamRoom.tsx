@@ -2,7 +2,7 @@
 // đồng hồ theo giờ máy chủ, nộp bài thử lại tới khi thành công; hết giờ máy chủ tự chốt bằng bản lưu cuối.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, get, post } from '../../api';
-import { ErrorBox, go, Loading, Modal, useApp, Mascot, Icon } from '../../ui/kit';
+import { ErrorBox, go, Loading, Modal, useApp, Mascot, Icon, topicName } from '../../ui/kit';
 import { isAnswered, Item, QuestionView, Review } from '../../ui/Question';
 import { ExamScratchpad } from '../../ui/ExamScratchpad';
 import { ImageZoomModal } from '../../ui/ImageZoomModal';
@@ -59,12 +59,15 @@ function fmtClock(ms: number) {
 }
 
 export function ExamRoom({ attemptId }: { attemptId: number }) {
-  const { toast } = useApp();
+  const { toast, meta } = useApp();
   const [att, setAtt] = useState<Attempt | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cur, setCur] = useState(0);
   const [responses, setResponses] = useState<Record<string, any>>({});
   const [flags, setFlags] = useState<Record<string, boolean>>({});
+  // Bản sao để hàm nộp bài luôn đọc được danh sách đánh dấu mới nhất
+  const flagsRef = useRef<Record<string, boolean>>({});
+  flagsRef.current = flags;
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'offline'>('saved');
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -278,7 +281,8 @@ export function ExamRoom({ attemptId }: { attemptId: number }) {
       if (!att || finished.current) return;
       trackTime();
       setSubmitting(true);
-      const body = { responses: respRef.current, times: times.current, version: Math.max(version.current, serverVersion.current + 1), events: events.current.splice(0), clientId: cid };
+      const flagged = Object.keys(flagsRef.current).filter((k) => flagsRef.current[k]).map(Number);
+      const body = { responses: respRef.current, times: times.current, version: Math.max(version.current, serverVersion.current + 1), events: events.current.splice(0), clientId: cid, flagged };
       const url = att.kind === 'practice' ? `/api/practice/${att.id}/finish` : `/api/attempts/${att.id}/submit`;
       for (let i = 0; i < 6; i++) {
         try {
@@ -542,18 +546,19 @@ export function ExamRoom({ attemptId }: { attemptId: number }) {
                 {it.topic && (
                   <>
                     <span className="academic-sep" aria-hidden="true">·</span>
-                    <span className="question-topic-label">{it.topic}</span>
+                    <span className="question-topic-label">{topicName(meta, it.topic)}</span>
                   </>
                 )}
               </div>
 
-              {!isPractice && (
+              {(
                 <button
                   type="button"
+                  title="Câu đánh dấu sẽ được đưa vào Sổ tay lỗi sai khi nộp bài"
                   className={`exam-flag-btn ${flags[it.qid] ? 'is-flagged' : ''}`}
                   onClick={() => toggleFlag(it.qid)}
                 >
-                  <span>{flags[it.qid] ? '★ Đã gắn cờ' : '☆ Đánh dấu xem lại'}</span>
+                  <span>{flags[it.qid] ? '★ Đã đánh dấu' : '☆ Đánh dấu xem lại'}</span>
                 </button>
               )}
             </div>

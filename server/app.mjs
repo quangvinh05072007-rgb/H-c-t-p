@@ -3153,6 +3153,22 @@ export function createApp(config = {}) {
     }
     return { ok: true, version: Math.max(version, att.version), serverNow: t, deadlineAt: att.deadline_at };
   });
+  /** Câu học sinh đánh dấu khi làm bài → vào Sổ tay lỗi sai (dù làm đúng), không ghi đè ghi chú sẵn có. */
+  function saveFlaggedToNotebook(user, att, flagged) {
+    if (!Array.isArray(flagged) || !flagged.length) return;
+    const inAttempt = new Set((att.layout ?? []).map((it) => Number(it.qid)));
+    const qids = [...new Set(flagged.map(Number))].filter((q) => Number.isInteger(q) && inAttempt.has(q)).slice(0, 60);
+    const t = now();
+    for (const qid of qids) {
+      db.run(
+        `INSERT INTO student_notes (student_id, qid, school_id, note, tag, updated_at)
+         VALUES (?, ?, ?, ?, 'important', ?)
+         ON CONFLICT(student_id, qid) DO NOTHING`,
+        user.id, qid, user.school_id, 'Đánh dấu xem lại khi làm bài', t,
+      );
+    }
+  }
+
   route('POST', '/api/attempts/:id/submit', ['student'], ({ user, params, body, ip }) => {
     const att = ownAttempt(user, params.id);
     validateAttemptPayload(body);
@@ -3169,6 +3185,7 @@ export function createApp(config = {}) {
       }
       return finalize({ ...att, events }, useBody ? body.responses : att.responses, useBody ? body.times ?? {} : att.times, inTime ? 'submitted' : 'auto_submitted');
     });
+    saveFlaggedToNotebook(user, att, body.flagged);
     audit(user, 'attempt_submit', `bài làm #${att.id}${inTime ? '' : ' (quá giờ, chốt bằng bản lưu)'}`, ip);
     return attemptView(done);
   });
@@ -3257,8 +3274,12 @@ export function createApp(config = {}) {
         const w = wrongByQ[qid];
         const r = revByQ[qid];
         const n = noteByQ[qid];
-        const errCode = w?.error_type || 'concept';
-        const errInfo = ERROR_TYPES[errCode] || {
+        // Câu chỉ được đánh dấu/ghi chú (chưa từng sai): không gán lỗi giả
+        const flaggedOnly = !w && !r;
+        const errCode = flaggedOnly ? 'flagged' : w?.error_type || 'concept';
+        const errInfo = flaggedOnly
+          ? { name: 'Đã đánh dấu', hint: 'Em đã đánh dấu câu này để xem lại.', action: 'Đọc lại lời giải và tự làm lại một lần.' }
+          : ERROR_TYPES[errCode] || {
           name: 'Nhầm bản chất / Công thức',
           hint: 'Cần xem lại định nghĩa và điều kiện áp dụng công thức.',
           action: 'Ghi chú lại công thức trọng tâm và làm 3 câu tương tự.',
@@ -3276,7 +3297,7 @@ export function createApp(config = {}) {
           topicName: TOPIC_BY_CODE[q.topic]?.name || q.topic || 'Chuyên đề Toán',
           grade: TOPIC_BY_CODE[q.topic]?.grade || 12,
           level: q.level,
-          wrongCount: Number(w?.wrong_count || (r ? Math.max(1, r.lapses) : 1)),
+          wrongCount: flaggedOnly ? 0 : Number(w?.wrong_count || (r ? Math.max(1, r.lapses) : 1)),
           lastWrongAt: w?.last_wrong_at || t,
           errorType: errCode,
           errorName: errInfo.name,
@@ -3707,6 +3728,7 @@ export function createApp(config = {}) {
     if (att.kind !== 'practice') fail(400, 'Không phải bài luyện tập.');
     if (att.status !== 'in_progress') return attemptView(att);
     const done = db.tx(() => finalize(att, { ...att.responses, ...(body.responses ?? {}) }, body.times ?? att.times, 'submitted'));
+    saveFlaggedToNotebook(user, att, body.flagged);
     return attemptView(done);
   });
 
