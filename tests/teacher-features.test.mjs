@@ -130,3 +130,24 @@ test('Ghi điểm phiếu tô vào bảng điểm: đúng mã đề, không ghi 
   const minh = await login('gv.minh');
   assert.equal((await minh.post('/api/omr/record', { assignmentId: asg.id, studentId: st.id, variantCode: code, answers })).status, 404);
 });
+
+test('Đề cấu trúc Bộ bằng 1 nút: đúng 12/4/6, 90 phút; đề tương đương cùng ma trận khác câu', async () => {
+  const lan = await login('gv.lan');
+  const off = await lan.post('/api/exams/official', {});
+  assert.equal(off.status, 200, JSON.stringify(off.data));
+  const e = app.db.get('SELECT items_json, duration_min FROM exams WHERE id = ?', off.data.id);
+  const c = { mcq: 0, tf: 0, short: 0 };
+  for (const it of e.items) c[it.type]++;
+  assert.deepEqual(c, { mcq: 12, tf: 4, short: 6 });
+  assert.equal(e.duration_min, 90);
+
+  const eq = await lan.post(`/api/exams/${off.data.id}/equivalent`, {});
+  assert.equal(eq.status, 200, JSON.stringify(eq.data));
+  const e2 = app.db.get('SELECT items_json, parent_id FROM exams WHERE id = ?', eq.data.id);
+  assert.equal(e2.parent_id, off.data.id);
+  assert.equal(e2.items.length, 22);
+  for (let i = 0; i < 22; i++) assert.equal(e2.items[i].type, e.items[i].type, 'cùng loại câu từng vị trí');
+  const same = e2.items.filter((x, i) => x.qid === e.items[i].qid).length;
+  assert.equal(same, eq.data.kept, 'chỉ giữ câu khi không có câu thay');
+  assert.ok(eq.data.exact + eq.data.relaxed > 0);
+});

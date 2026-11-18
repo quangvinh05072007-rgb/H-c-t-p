@@ -16,12 +16,13 @@ export function Exams() {
   const suffix = requestedClass && /^\d+$/.test(requestedClass) ? `?classId=${requestedClass}` : '';
   const editSuffix = requestedClass && /^\d+$/.test(requestedClass) ? `&classId=${requestedClass}` : '';
   const [scope, setScope] = useState('all');
+  const [officialBusy, setOfficialBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [dept, setDept] = useState('');
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [omrExam, setOmrExam] = useState<any>(null);
   const [assignTarget, setAssignTarget] = useState<any>(null);
-  const { meta } = useApp();
+  const { meta, toast } = useApp();
   const { data, error, loading, reload } = useAsync(() => get('/api/exams'), []);
   const allExams = data?.exams ?? [];
   const exams = filterExamCatalog(allExams, { scope, search, dept });
@@ -52,17 +53,28 @@ export function Exams() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {meta.omrAvailable && (
-            <button
-              className="btn sm ghost"
-              type="button"
-              onClick={() => setOmrExam(allExams[0] || { id: 0, title: 'Phiếu trắc nghiệm' })}
-            >
-              <Icon name="scan" /> Chấm OMR
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn sm"
+            disabled={officialBusy}
+            title="Tự ghép đề 12 trắc nghiệm, 4 đúng/sai, 6 trả lời ngắn, 90 phút từ câu đã duyệt"
+            onClick={async () => {
+              setOfficialBusy(true);
+              try {
+                const r = await post<{ id: number; title: string }>('/api/exams/official', {});
+                toast(`Đã tạo "${r.title}".`);
+                go(`/de-thi/${r.id}${suffix}`);
+              } catch (e: any) {
+                toast(e.message);
+              } finally {
+                setOfficialBusy(false);
+              }
+            }}
+          >
+            {officialBusy ? 'Đang ghép đề…' : 'Đề cấu trúc Bộ (1 nút)'}
+          </button>
           <a className="btn sm primary" href={`#/ra-de${suffix}`}>
-            <Icon name="plus" /> Tạo đề mới
+            <Icon name="plus" /> Soạn đề mới
           </a>
         </div>
       </div>
@@ -657,6 +669,20 @@ export function ExamDetail({ id }: { id: number }) {
                   }
                 >
                   Nhân bản đề
+                </button>
+                <button
+                  className="btn sm"
+                  title="Đề mới cùng ma trận (loại, chuyên đề, mức độ từng câu) nhưng khác câu: dùng cho học sinh vắng thi hoặc thi lại"
+                  onClick={() =>
+                    post<any>(`/api/exams/${id}/equivalent`, {})
+                      .then((r) => {
+                        toast(`Đã tạo đề tương đương: ${r.exact} câu khớp hoàn toàn${r.warnings?.length ? `. ${r.warnings.join(' ')}` : '.'}`);
+                        go(`/de-thi/${r.id}${classSuffix}`);
+                      })
+                      .catch((e) => toast(e.message))
+                  }
+                >
+                  Đề tương đương
                 </button>
               </div>
             </div>

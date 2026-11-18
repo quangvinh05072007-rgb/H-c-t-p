@@ -28,6 +28,7 @@ import { isMathVerifyAvailable, verifyMathEquivalence, validateMathExpression } 
 import { findDuplicates, QuestionSearchIndex } from '../shared/duplicate-detector.mjs';
 import { isOmrAvailable, processOmrImage, generateOmrTemplateHtml } from './omr.mjs';
 import JSZip from 'jszip';
+import { makeRng } from '../shared/rng.mjs';
 import { parsePackage, bindImages, samplePackage } from '../shared/package.mjs';
 
 export const SAVE_GRACE_MS = 30 * 1000; // ân hạn mạng sau giờ nộp
@@ -1412,6 +1413,73 @@ export function createApp(config = {}) {
   });
 
   // ---- nhân bản đề ----
+  /** Lưu một đề mới (dùng chung cho đề tương đương và đề cấu trúc Bộ). */
+  function saveNewExam(user, { title, qids, durationMin, variantCount, blueprint, parentId = null }) {
+    const qmap = questionsMap(user.school_id, qids);
+    const items = qids.map((qid) => ({ qid, type: qmap[qid].type, topic: qmap[qid].topic, level: qmap[qid].level, group: qmap[qid].group_id ?? null, fixedOptions: imageOptions(qmap[qid]) }));
+    const variants = makeVariants(items, variantCount, `${user.id}-${now()}-${title}`);
+    return Number(
+      db.run(
+        'INSERT INTO exams (school_id, title, blueprint_json, items_json, duration_min, variants_json, snapshot_json, created_by, created_at, visibility, parent_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        user.school_id, title, JSON.stringify(blueprint ?? {}), JSON.stringify(items), durationMin, JSON.stringify(variants), JSON.stringify(qmap), user.id, now(), 'private', parentId,
+      ).lastInsertRowid,
+    );
+  }
+
+  // Đề tương đương: cùng ma trận (loại × chuyên đề × mức độ từng câu), khác câu — cho học sinh vắng thi, thi lại
+  route('POST', '/api/exams/:id/equivalent', STAFF, ({ user, params, ip }) => {
+    const e = visibleExam(user, params.id);
+    const used = new Set(e.items.map((x) => x.qid));
+    const pool = db.all("SELECT id, type, topic, level, group_id FROM questions WHERE school_id = ? AND status = 'approved'", user.school_id)
+      .filter((q) => !used.has(q.id) && !q.group_id);
+    const rng = makeRng(`eq-${e.id}-${now()}`);
+    const take = (pred) => {
+      const cand = pool.filter((q) => !used.has(q.id) && pred(q));
+      if (!cand.length) return null;
+      const q = cand[Math.floor(rng() * cand.length)];
+      used.add(q.id);
+      return q.id;
+    };
+    const qids = [];
+    let exact = 0, relaxed = 0, kept = 0;
+    for (const it of e.items) {
+      if (it.group) { qids.push(it.qid); kept++; continue; }
+      let id = take((q) => q.type === it.type && q.topic === it.topic && q.level === it.level);
+      if (id) exact++;
+      else {
+        id = take((q) => q.type === it.type && q.topic === it.topic) ?? take((q) => q.type === it.type && q.level === it.level && TOPIC_BY_CODE[q.topic]?.grade === TOPIC_BY_CODE[it.topic]?.grade);
+        if (id) relaxed++;
+      }
+      if (!id) { id = it.qid; kept++; }
+      qids.push(id);
+    }
+    if (kept === e.items.length) fail(400, 'Ngân hàng chưa có câu thay thế nào phù hợp. Bổ sung câu cùng chuyên đề và mức độ (xem tab Độ phủ).');
+    const id = saveNewExam(user, { title: `${e.title} – đề tương đương`, qids, durationMin: e.duration_min, variantCount: e.variants.length || 4, blueprint: e.blueprint, parentId: e.id });
+    const warnings = [];
+    if (relaxed) warnings.push(`${relaxed} câu không có câu cùng chuyên đề và mức độ, đã lấy câu gần nhất (cùng chuyên đề hoặc cùng mức độ).`);
+    if (kept) warnings.push(`${kept} câu giữ nguyên vì không có câu thay thế${e.items.some((x) => x.group) ? ' hoặc là câu chùm' : ''}.`);
+    audit(user, 'exam_equivalent', `#${e.id} → #${id}: ${exact} khớp, ${relaxed} gần, ${kept} giữ`, ip, { target: `exam:${id}` });
+    return { id, exact, relaxed, kept, warnings };
+  });
+
+  // Đề theo cấu trúc Bộ (12 TN · 4 Đ/S · 6 TLN · 90 phút) bằng một nút
+  route('POST', '/api/exams/official', STAFF, ({ user, body, ip }) => {
+    const pool = db.all("SELECT id, type, topic, level, status FROM questions WHERE school_id = ? AND status = 'approved'", user.school_id);
+    const grade = [10, 11, 12].includes(Number(body.grade)) ? Number(body.grade) : null;
+    const topics = grade ? TOPICS.filter((t) => t.grade === grade).map((t) => t.code) : [];
+    const g = generateExam(pool, { ...OFFICIAL_BLUEPRINT, topics, seed: `official-${user.id}-${now()}` });
+    const need = OFFICIAL_BLUEPRINT.counts;
+    const got = { mcq: 0, tf: 0, short: 0 };
+    for (const it of g.items) got[it.type]++;
+    if (got.mcq < need.mcq || got.tf < need.tf || got.short < need.short) {
+      fail(400, `Ngân hàng chưa đủ câu đã duyệt (có ${got.mcq}/${need.mcq} trắc nghiệm, ${got.tf}/${need.tf} đúng/sai, ${got.short}/${need.short} trả lời ngắn). Xem tab Độ phủ để biết cần bổ sung gì.`);
+    }
+    const title = String(body.title ?? '').trim() || `Đề thi thử tốt nghiệp THPT – ${new Date(now()).toLocaleDateString('vi-VN')}`;
+    const id = saveNewExam(user, { title, qids: g.items.map((x) => x.qid), durationMin: OFFICIAL_BLUEPRINT.durationMin, variantCount: 4, blueprint: { ...OFFICIAL_BLUEPRINT, topics } });
+    audit(user, 'exam_official', `#${id} ${title}`, ip, { target: `exam:${id}` });
+    return { id, title, warnings: g.warnings ?? [] };
+  });
+
   route('POST', '/api/exams/:id/clone', STAFF, ({ user, params, body, ip }) => {
     const e = visibleExam(user, params.id);
     // Câu còn dùng được thì lấy bản mới nhất; câu đã bị lưu trữ giữ nguyên bản đã chụp để đề không đổi.
