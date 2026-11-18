@@ -824,3 +824,44 @@
   /* Nhãn hạn nộp được xuống dòng thay vì tràn sang nút */
   .su-chip { white-space: normal; }
 }
+
+/* Ô chọn nhỏ dạng viên thuốc, cùng cỡ với chip */
+.su-filter-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.su-select {
+  min-height: 32px;
+  padding: 5px 28px 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background-color: var(--surface);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.su-select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+@media (max-width: 640px) {
+  .su-filter-tools {
+    width: 100%;
+  }
+  .su-filter-tools .su-select {
+    flex: 1;
+    min-width: 0;
+  }
+}
+@media (max-width: 640px) {
+  .su-filter-tools {
+    flex-wrap: wrap;
+  }
+  .su-filter-tools .su-select {
+    flex: 1 1 110px;
+    min-width: 110px;
+  }
+}

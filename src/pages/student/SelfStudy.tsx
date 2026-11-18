@@ -323,7 +323,7 @@ export function SelfStudy() {
         )}
       </header>
 
-      {/* Một hàng chọn môn + khối, một hàng tìm kiếm và trạng thái */}
+      {/* Một hàng duy nhất: môn học (chip) + khối, trạng thái (ô chọn nhỏ) + ghép chủ đề */}
       <div className="su-filterbar">
         <div className="su-pills" role="tablist" aria-label="Chọn môn học">
           {SUBJECTS.map((s) => (
@@ -347,76 +347,52 @@ export function SelfStudy() {
           ))}
         </div>
         <span className="su-grow" />
-        <div className="seg" role="group" aria-label="Chọn khối lớp">
-          {[12, 11, 10].map((g) => (
+        <div className="su-filter-tools">
+          <select
+            className="su-select"
+            value={selectedGrade}
+            onChange={(e) => {
+              setSelectedGrade(Number(e.target.value));
+              setPicked([]);
+            }}
+            aria-label="Chọn khối lớp"
+          >
+            {[12, 11, 10].map((g) => (
+              <option key={g} value={g}>Lớp {g}</option>
+            ))}
+          </select>
+          <select
+            className="su-select"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            aria-label="Lọc theo trạng thái học tập"
+          >
+            <option value="all">Mọi trạng thái</option>
+            <option value="weak">Cần củng cố ({stats.weak})</option>
+            <option value="learning">Đang học ({stats.learning})</option>
+            <option value="mastered">Thành thạo ({stats.mastered})</option>
+            <option value="unattempted">Chưa học ({stats.unattempted})</option>
+          </select>
+          {selectedSubject === 'math' && (
             <button
-              key={g}
               type="button"
-              aria-pressed={selectedGrade === g}
-              className={selectedGrade === g ? 'on' : ''}
+              className={`btn sm ${multiPickMode ? 'primary' : ''}`}
+              aria-pressed={multiPickMode}
+              title="Chọn nhiều chủ đề để luyện chung một đề"
               onClick={() => {
-                setSelectedGrade(g);
-                setPicked([]);
+                if (multiPickMode) {
+                  setMultiPickMode(false);
+                  setPicked([]);
+                } else {
+                  setMultiPickMode(true);
+                }
               }}
             >
-              Lớp {g}
+              <Layers size={14} aria-hidden="true" />
+              {multiPickMode ? `Đang ghép (${picked.length})` : 'Ghép chủ đề'}
             </button>
-          ))}
+          )}
         </div>
-      </div>
-
-      <div className="su-filterbar">
-        <div className="su-pills" role="group" aria-label="Lọc theo trạng thái học tập">
-          {(
-            [
-              ['all', `Tất cả ${stats.total}`],
-              ['weak', `Cần củng cố ${stats.weak}`],
-              ['learning', `Đang học ${stats.learning}`],
-              ['mastered', `Thành thạo ${stats.mastered}`],
-              ['unattempted', `Chưa học ${stats.unattempted}`],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={statusFilter === key}
-              className={`su-pill ${statusFilter === key ? 'on' : ''}`}
-              onClick={() => setStatusFilter(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <span className="su-grow" />
-        <label style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <Search size={14} aria-hidden="true" style={{ position: 'absolute', left: 10, color: 'var(--ink-3)' }} />
-          <input
-            type="search"
-            placeholder="Tìm chủ đề…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Tìm kiếm chủ đề tự học"
-            style={{ paddingLeft: 30, width: 180, minHeight: 34 }}
-          />
-        </label>
-        {selectedSubject === 'math' && (
-          <button
-            type="button"
-            className={`btn sm ${multiPickMode ? 'primary' : ''}`}
-            aria-pressed={multiPickMode}
-            onClick={() => {
-              if (multiPickMode) {
-                setMultiPickMode(false);
-                setPicked([]);
-              } else {
-                setMultiPickMode(true);
-              }
-            }}
-          >
-            <Layers size={14} aria-hidden="true" />
-            {multiPickMode ? `Đang ghép (${picked.length})` : 'Ghép nhiều chủ đề'}
-          </button>
-        )}
       </div>
 
       {filteredTopics.length === 0 ? (
