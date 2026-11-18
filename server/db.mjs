@@ -174,6 +174,7 @@ const ADDED_COLUMNS = [
   ['users', 'target_score', 'REAL'],
   ['attempts', 'mode', 'TEXT'],
   ['attempts', 'flagged_json', 'TEXT'],
+  ['questions', 'form', 'TEXT'],
 ];
 
 export function migrate(db) {
@@ -270,5 +271,6 @@ export function toQuestion(row) {
     updated_at: r.updated_at,
     sample: r.sample,
     group_id: r.group_id ?? null,
+    form: r.form ?? null,
   };
 }

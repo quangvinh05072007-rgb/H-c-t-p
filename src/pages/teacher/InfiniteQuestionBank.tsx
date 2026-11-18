@@ -62,6 +62,15 @@ export function InfiniteQuestionBank({
   const [status, setStatus] = useState<string>('all');
   const [type, setType] = useState<string>('');
   const [topic, setTopic] = useState<string>('');
+  const [form, setForm] = useState<string>('');
+  const [formOptions, setFormOptions] = useState<{ form: string; n: number }[]>([]);
+  useEffect(() => {
+    setForm('');
+    if (!topic) return setFormOptions([]);
+    get<{ forms: { form: string; n: number }[] }>(`/api/bank/forms?topic=${encodeURIComponent(topic)}`)
+      .then((r) => setFormOptions(r.forms))
+      .catch(() => setFormOptions([]));
+  }, [topic]);
   const [grade, setGrade] = useState<string>('');
   const [level, setLevel] = useState<string>('');
 
@@ -86,6 +95,7 @@ export function InfiniteQuestionBank({
     if (status) params.set('status', status);
     if (type) params.set('type', type);
     if (topic) params.set('topic', topic);
+    if (form) params.set('form', form);
     if (grade) params.set('grade', grade);
     if (level) params.set('level', level);
     if (search.trim()) params.set('q', search.trim());
@@ -115,7 +125,7 @@ export function InfiniteQuestionBank({
 
   useEffect(() => {
     loadBatch(true);
-  }, [status, type, topic, grade, level, search]);
+  }, [status, type, topic, form, grade, level, search]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -274,6 +284,14 @@ export function InfiniteQuestionBank({
           ))}
         </select>
 
+        {formOptions.length > 0 && (
+          <select className="input" value={form} onChange={(e) => setForm(e.target.value)} style={{ width: 'auto', minHeight: 34, fontSize: 12.5, maxWidth: 200 }} aria-label="Dạng toán">
+            <option value="">Mọi dạng toán</option>
+            {formOptions.map((f) => (
+              <option key={f.form} value={f.form}>{f.form} ({f.n})</option>
+            ))}
+          </select>
+        )}
         <button
           type="button"
           className={`btn sm ${showMoreFilters || grade || type || level || status !== 'all' ? 'primary' : ''}`}
@@ -441,6 +459,7 @@ export function InfiniteQuestionBank({
                   <span>{TYPE_LABEL[q.type] || q.type}</span>
                   <span>· {LEVEL_LABEL[q.level] || `Mức ${q.level}`}</span>
                   <span>· {topicName(meta, q.topic)}</span>
+                  {(q as any).form && <span className="su-chip">{(q as any).form}</span>}
                 </div>
               </div>
               <div className="su-bank-actions" onClick={(e) => e.stopPropagation()}>

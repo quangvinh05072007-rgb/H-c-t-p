@@ -11,6 +11,7 @@ type Summary = {
   lessons: { topic: string; name: string }[];
   errors: { where: string; message: string }[];
   warnings: string[];
+  duplicates?: { key: string; id: number; score: number; exact: boolean }[];
 };
 type Done = {
   approved: number;
@@ -142,6 +143,19 @@ export function PackageImport() {
               <ul style={{ margin: '0 0 0 22px', padding: 0, maxHeight: 180, overflow: 'auto' }}>
                 {summary.errors.map((e, i) => (
                   <li key={i}><b>{e.where}:</b> {e.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {(summary.duplicates?.length ?? 0) > 0 && (
+            <div className="su-mistake-why" style={{ margin: '8px 0', background: 'var(--warn-soft)' }}>
+              <div>
+                <CircleAlert size={14} aria-hidden="true" color="var(--warn)" />
+                <span><b>{summary.duplicates!.length} câu giống câu đã có trong ngân hàng.</b> Câu trùng hệt sẽ được bỏ qua; câu gần trùng vẫn được nhập, nên xem lại.</span>
+              </div>
+              <ul style={{ margin: '0 0 0 22px', padding: 0, maxHeight: 140, overflow: 'auto' }}>
+                {summary.duplicates!.map((d) => (
+                  <li key={d.key}>Câu <b>{d.key}</b> ↔ câu #{d.id} trong ngân hàng ({d.exact ? 'trùng hệt' : `giống ${d.score}%`})</li>
                 ))}
               </ul>
             </div>

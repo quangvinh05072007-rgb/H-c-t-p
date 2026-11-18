@@ -736,6 +736,7 @@ export function createApp(config = {}) {
     else where.push("status != 'archived'");
     if (query.type) (where.push('type = ?'), p.push(query.type));
     if (query.topic) (where.push('topic = ?'), p.push(query.topic));
+    if (query.form) (where.push('form = ?'), p.push(String(query.form)));
     if (query.source) (where.push('source = ?'), p.push(query.source));
     if (query.level) (where.push('level = ?'), p.push(Number(query.level)));
     if (query.grade) {
@@ -802,8 +803,16 @@ export function createApp(config = {}) {
       String(q.ocrText ?? ''),
       String(q.sourceStem ?? ''),
     );
+    const newId = Number(r.lastInsertRowid);
+    const form = cleanForm(q.form);
+    if (form) db.run('UPDATE questions SET form = ? WHERE id = ?', form, newId);
     invalidateQuestionIndex(user.school_id);
-    return Number(r.lastInsertRowid);
+    return newId;
+  }
+  /** Dạng toán: nhãn ngắn chi tiết hơn chuyên đề (vd "Đổi biến số"). */
+  function cleanForm(v) {
+    const s = String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    return s || null;
   }
 
   route('POST', '/api/questions', STAFF, ({ user, body, ip }) => {
@@ -852,6 +861,7 @@ export function createApp(config = {}) {
   route('PUT', '/api/questions/:id', STAFF, ({ user, params, body, ip }) => {
     const q = db.get('SELECT * FROM questions WHERE id = ? AND school_id = ?', params.id, user.school_id);
     if (!q) fail(404, 'Không tìm thấy câu hỏi.');
+    if (Object.prototype.hasOwnProperty.call(body ?? {}, 'form')) db.run('UPDATE questions SET form = ? WHERE id = ?', cleanForm(body.form), q.id);
     const EDITABLE_FIELDS = ['type', 'stem', 'options', 'answer', 'explanation', 'topic', 'level', 'distractors', 'group_id', 'ocrText', 'sourceStem'];
     const patch = {};
     for (const k of EDITABLE_FIELDS) {
@@ -959,6 +969,12 @@ export function createApp(config = {}) {
   });
 
   // ---- NGÂN HÀNG: ĐỘ PHỦ (chuyên đề × mức × loại) và CÂU CẦN SỬA (gom từ mọi lần dùng) ----
+  route('GET', '/api/bank/forms', STAFF, ({ user, query }) => {
+    const rows = query.topic
+      ? db.all("SELECT form, COUNT(*) n FROM questions WHERE school_id = ? AND topic = ? AND form IS NOT NULL AND status != 'archived' GROUP BY form ORDER BY n DESC", user.school_id, String(query.topic))
+      : db.all("SELECT form, COUNT(*) n FROM questions WHERE school_id = ? AND form IS NOT NULL AND status != 'archived' GROUP BY form ORDER BY n DESC LIMIT 200", user.school_id);
+    return { forms: rows.map((r) => ({ form: r.form, n: r.n })) };
+  });
   route('GET', '/api/bank/coverage', STAFF, ({ user }) => {
     const rows = db.all("SELECT topic, level, type, COUNT(*) n FROM questions WHERE school_id = ? AND status = 'approved' GROUP BY topic, level, type", user.school_id);
     const cell = {};
@@ -1190,7 +1206,16 @@ export function createApp(config = {}) {
     const { json, images } = await readPackage(filename, raw);
     const p = parsePackage(json, new Set(Object.keys(images)));
     const dryRun = query.dryRun === '1' || query.dryRun === 'true';
-    if (dryRun) return { dryRun: true, ...packageSummary(p) };
+    if (dryRun) {
+      // Câu gần trùng với ngân hàng (giống ≥ 75%): báo trước để người nhập xem lại; câu trùng hệt sẽ tự bỏ qua khi nhập
+      const idx = getQuestionIndex(user.school_id);
+      const duplicates = [];
+      for (const q of p.questions) {
+        const hit = idx.findDuplicates(q.stem, { threshold: 0.75, limit: 1 })[0];
+        if (hit) duplicates.push({ key: q.key, id: hit.id, score: Math.round(hit.score * 100), exact: hit.score >= 0.99 });
+      }
+      return { dryRun: true, ...packageSummary(p), duplicates };
+    }
     if (!p.questions.length && !p.lessons.length) fail(400, p.errors[0]?.message ?? 'Gói không có mục hợp lệ để nhập.');
 
     const wantApprove = query.approve === '1' || query.approve === 'true';
@@ -1229,6 +1254,7 @@ export function createApp(config = {}) {
           topic: q.topic,
           level: q.level,
           group_id: q.group_id,
+          form: q.form,
         }, 'imported', status, { origin });
         idByKey[q.key] = id;
         if (status === 'approved') approved++; else drafts++;

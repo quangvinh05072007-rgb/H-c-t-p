@@ -38,6 +38,7 @@ Nhập ở **Nhập đề → Gói nhập chuẩn**. App **kiểm tra trước**
 | `answer` | có | mcq: `"A"`…`"D"`; tf: `"ĐĐSS"` (hoặc `"DDSS"`, `[true,true,false,false]`); short: số hoặc chuỗi như `"1,5"`. |
 | `explanation` | không | Lời giải. |
 | `group` | không | Các câu cùng `group` luôn đi cùng nhau khi đảo đề (câu chùm). |
+| `form` | không | **Dạng toán**, chi tiết hơn chuyên đề (vd `"Đổi biến số"`, `"Tích phân từng phần"`) — dùng để lọc và ghép đề. |
 
 **Công thức** viết LaTeX giữa hai dấu `$`, vd `$\int_0^1 2x\,dx$`. Trong JSON phải nhân đôi dấu `\`: `"$\\int_0^1 2x\\,dx$"`.
 
@@ -45,7 +46,7 @@ Nhập ở **Nhập đề → Gói nhập chuẩn**. App **kiểm tra trước**
 
 **Bảng**: mỗi dòng dạng `| a | b | c |`.
 
-Câu trùng hệt (cùng loại, cùng đề bài) với câu đã có trong ngân hàng sẽ được bỏ qua, không tạo bản sao.
+Câu trùng hệt (cùng loại, cùng đề bài) với câu đã có trong ngân hàng sẽ được bỏ qua, không tạo bản sao. Khi kiểm tra gói, app còn liệt kê các câu **giống từ 75%** với câu đã có để bạn xem lại.
 
 ## Đề thi — `exams`
 

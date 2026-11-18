@@ -113,3 +113,29 @@ test('Gói không duyệt luôn: câu ở dạng nháp và đề chưa được 
   const sample = await lan.get('/api/import/package-sample.json');
   assert.equal(sample.status, 200);
 });
+
+test('Dạng toán: nhập qua gói, sửa, lọc; kiểm tra gói báo câu gần trùng với ngân hàng', async () => {
+  const lan = await login('gv.lan');
+  const pkg = samplePackage();
+  pkg.questions.forEach((q, i) => (q.stem = `${q.stem} [dạng ${i}]`));
+  pkg.questions[2].form = 'Tích phân cơ bản';
+  pkg.exams = [];
+  pkg.lessons = [];
+  const r = await lan.upload('/api/import/package?filename=goi.json&approve=1', Buffer.from(JSON.stringify(pkg)));
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const forms = await lan.get('/api/bank/forms?topic=T12.NGUYENHAM');
+  assert.ok(forms.data.forms.some((f) => f.form === 'Nguyên hàm cơ bản'));
+  assert.ok(forms.data.forms.some((f) => f.form === 'Tích phân cơ bản'));
+  const listed = await lan.get(`/api/questions?topic=T12.NGUYENHAM&form=${encodeURIComponent('Tích phân cơ bản')}&status=all`);
+  assert.ok(listed.data.questions.length >= 1);
+  assert.ok(listed.data.questions.every((q) => q.form === 'Tích phân cơ bản'));
+  // Gói thứ hai có câu gần giống: kiểm tra thử phải báo
+  const pkg2 = samplePackage();
+  pkg2.questions = [{ ...pkg.questions[0], id: 'n1', stem: pkg.questions[0].stem.replace('[dạng 0]', '[dạng 0 bản mới]') }];
+  pkg2.exams = [];
+  pkg2.lessons = [];
+  const dry = await lan.upload('/api/import/package?filename=goi.json&dryRun=1', Buffer.from(JSON.stringify(pkg2)));
+  assert.equal(dry.status, 200);
+  assert.equal(dry.data.duplicates.length, 1);
+  assert.equal(dry.data.duplicates[0].key, 'n1');
+});

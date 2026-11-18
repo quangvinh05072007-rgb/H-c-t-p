@@ -2,10 +2,10 @@
 import { lazy, Suspense, useEffect, useId, useState } from 'react';
 import { MathText } from './MathText';
 import { useApp } from './kit';
-import { post } from '../api';
+import { get, post } from '../api';
 const RichField=lazy(()=>import('./RichField'));
 
-export type Draft = { id?: number; type: 'mcq' | 'tf' | 'short'; stem: string; options: string[]; answer: any; explanation: string; topic: string | null; level: number; distractors?: any; group_id?: string | null; ocrText?: string; sourceStem?: string };
+export type Draft = { id?: number; type: 'mcq' | 'tf' | 'short'; stem: string; options: string[]; answer: any; explanation: string; topic: string | null; level: number; distractors?: any; group_id?: string | null; ocrText?: string; sourceStem?: string; form?: string | null };
 
 export function QuestionEditor({ q, onChange }: { q: Draft; onChange: (q: Draft) => void }) {
   const { meta } = useApp();
@@ -19,6 +19,14 @@ export function QuestionEditor({ q, onChange }: { q: Draft; onChange: (q: Draft)
 
   const original=q.sourceStem || (q.ocrText&&q.stem.includes('[[img:')?q.stem:'');
   const set = (patch: Partial<Draft>) => onChange({ ...q, ...patch });
+  const formListId = useId().replace(/:/g, '');
+  const [formOptions, setFormOptions] = useState<string[]>([]);
+  useEffect(() => {
+    if (!q.topic) return setFormOptions([]);
+    get<{ forms: { form: string }[] }>(`/api/bank/forms?topic=${encodeURIComponent(q.topic)}`)
+      .then((r) => setFormOptions(r.forms.map((x) => x.form)))
+      .catch(() => setFormOptions([]));
+  }, [q.topic]);
   const setType = (type: Draft['type']) => {
     if (type === q.type) return;
     set({ type, options: type === 'short' ? [] : q.options.length === 4 ? q.options : ['', '', '', ''], answer: type === 'tf' ? [null, null, null, null] : null });
@@ -103,6 +111,10 @@ export function QuestionEditor({ q, onChange }: { q: Draft; onChange: (q: Draft)
           ))}
         </select>
       </div>
+      <label className="field">Dạng toán (chi tiết hơn chuyên đề, không bắt buộc)
+        <input className="input" maxLength={60} list={`forms-${formListId}`} value={q.form ?? ''} onChange={(e) => set({ form: e.target.value || null })} placeholder="Ví dụ: Đổi biến số, Tích phân từng phần" />
+        <datalist id={`forms-${formListId}`}>{formOptions.map((f) => <option key={f} value={f} />)}</datalist>
+      </label>
       <label className="field">Nhóm câu dùng chung dữ kiện (nếu có)<input className="input" maxLength={40} value={q.group_id ?? ''} onChange={e => set({group_id:e.target.value || null})} placeholder="Các câu cùng nhóm sẽ nằm liền nhau khi đảo đề" /></label>
       <div className="field">
         <label>Đề bài</label>

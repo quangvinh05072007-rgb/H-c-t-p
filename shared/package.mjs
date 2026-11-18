@@ -117,6 +117,7 @@ export function parsePackage(raw, imageNames = new Set()) {
       topic,
       level,
       group_id: text(q.group) ? text(q.group).slice(0, 40) : null,
+      form: text(q.form).slice(0, 60) || null,
     });
   });
 
@@ -195,6 +196,7 @@ export function samplePackage() {
         type: 'mcq',
         topic: 'T12.NGUYENHAM',
         level: 1,
+        form: 'Nguyên hàm cơ bản',
         stem: 'Họ nguyên hàm của hàm số $f(x) = \\cos x$ là',
         options: ['$\\sin x + C$', '$-\\sin x + C$', '$\\cos x + C$', '$-\\cos x + C$'],
         answer: 'A',
