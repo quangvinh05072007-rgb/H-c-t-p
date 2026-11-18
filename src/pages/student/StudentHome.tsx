@@ -394,7 +394,7 @@ export function StudentHome() {
           <section className="su-card" aria-label="Kết quả gần nhất">
             <div className="su-card-head">
               <h2>Kết quả gần nhất</h2>
-              <a className="su-link" href="#/ket-qua">Tất cả</a>
+              <a className="su-link" href="#/ho-so">Hồ sơ</a>
             </div>
             {recent ? (
               <>

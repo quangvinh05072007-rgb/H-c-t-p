@@ -244,6 +244,8 @@ export function ClassDirectoryGrid({
         </div>
       </header>
 
+      {role === 'student' && !loading && classes.length > 0 && <StudentClassSummary classes={classes} />}
+
       {/* Compact Filter Toolbar */}
       {showToolbar && (
       <div className="cls-filter-bar">
@@ -385,8 +387,16 @@ export function ClassDirectoryGrid({
         </div>
       )}
 
-      {/* Class Cards Grid (Unified for Student & Teacher) */}
-      {!loading && !error && filteredClasses.length > 0 && (role === 'student' || filters.viewMode === 'grid') && (
+      {role === 'student' && !loading && !error && filteredClasses.length > 0 && (
+        <div className="sc-grid">
+          {filteredClasses.map((c) => (
+            <StudentClassCard key={c.id} c={c} busy={openingId === c.id} onOpen={() => handleCardClick(c)} />
+          ))}
+        </div>
+      )}
+
+      {/* Class Cards Grid (giáo viên / quản lý) */}
+      {!loading && !error && filteredClasses.length > 0 && (role as string) !== 'student' && filters.viewMode === 'grid' && (
         <div className="cls-card-grid">
           {filteredClasses.map((c) => {
             const theme = GRADE_THEME[c.grade] ?? GRADE_THEME[12];
@@ -659,6 +669,106 @@ export function ClassDirectoryGrid({
           </form>
         </Modal>
       )}
+    </div>
+  );
+}
+
+
+// ===================== Học sinh: thẻ lớp & dải tóm tắt =====================
+const SC_TONE: Record<number, string> = { 12: 'is-g12', 11: 'is-g11', 10: 'is-g10' };
+
+function initialsOf(name?: string | null) {
+  const parts = String(name ?? '').replace(/^(Thầy|Cô)\s+/i, '').trim().split(/\s+/);
+  return parts.slice(-2).map((p) => p[0] ?? '').join('').toUpperCase() || 'GV';
+}
+
+function ProgressRing({ pct }: { pct: number }) {
+  const r = 22;
+  const c = 2 * Math.PI * r;
+  const v = Math.max(0, Math.min(100, pct));
+  return (
+    <svg className="sc-ring" viewBox="0 0 56 56" aria-hidden="true">
+      <circle cx="28" cy="28" r={r} className="sc-ring-bg" />
+      <circle cx="28" cy="28" r={r} className="sc-ring-fg" strokeDasharray={`${(v / 100) * c} ${c}`} transform="rotate(-90 28 28)" />
+      <text x="28" y="32" textAnchor="middle" className="sc-ring-text">{Math.round(v)}%</text>
+    </svg>
+  );
+}
+
+function StudentClassCard({ c, busy, onOpen }: { c: ClassroomSummary; busy: boolean; onOpen: () => void }) {
+  const pending = c.pending_count ?? 0;
+  const next = c.nextUrgent ?? null;
+  const dl = next ? formatDeadlineShort(next.closeAt) : c.next_deadline ? formatDeadlineShort(c.next_deadline) : null;
+  const total = c.totalTasks ?? c.total_assignments ?? 0;
+  const done = c.doneTasks ?? c.done_count ?? 0;
+  return (
+    <button type="button" className={`sc-card ${SC_TONE[c.grade] ?? 'is-g12'} ${busy ? 'is-busy' : ''}`} onClick={onOpen} aria-label={`Vào lớp ${c.name}`}>
+      <div className="sc-banner">
+        <div className="sc-banner-text">
+          <span className="sc-kicker">{c.subject || 'Toán học'} · Khối {c.grade}</span>
+          <strong className="sc-name">{c.name}</strong>
+        </div>
+        {c.enrolled ? <span className="sc-badge"><UserCheck size={12} aria-hidden="true" /> Đang học</span> : <span className="sc-badge"><KeyRound size={12} aria-hidden="true" /> Cần mã lớp</span>}
+      </div>
+      <div className="sc-teacher">
+        <span className="sc-avatar" aria-hidden="true">{initialsOf(c.teacher)}</span>
+        <span>
+          <small>Giáo viên</small>
+          <b>{c.teacher || 'Tổ Toán'}</b>
+        </span>
+      </div>
+      <div className="sc-body">
+        <ProgressRing pct={c.progressPct ?? (total ? (done / total) * 100 : 0)} />
+        <div className="sc-body-text">
+          <b>{total ? `Đã xong ${done}/${total} việc` : 'Chưa có bài giao'}</b>
+          {busy ? (
+            <span className="sc-next">Đang mở lớp…</span>
+          ) : pending > 0 ? (
+            <span className={`sc-next ${dl?.urgent ? 'is-urgent' : ''}`}>
+              <Clock size={13} aria-hidden="true" />
+              {next ? next.title : `${pending} bài cần làm`}
+              {dl ? ` · ${dl.label}` : ''}
+            </span>
+          ) : (
+            <span className="sc-next is-done"><CheckCircle2 size={13} aria-hidden="true" /> Không còn bài phải làm</span>
+          )}
+        </div>
+        {pending > 0 && <span className="sc-pending" title="Bài cần làm">{pending}</span>}
+      </div>
+      <div className="sc-foot">
+        <span><Users size={13} aria-hidden="true" /> {c.students} học sinh</span>
+        <span><Layers size={13} aria-hidden="true" /> {c.module_count ?? 0} học phần</span>
+        <span className="sc-go">Vào lớp <ArrowRight size={14} aria-hidden="true" /></span>
+      </div>
+    </button>
+  );
+}
+
+function StudentClassSummary({ classes }: { classes: ClassroomSummary[] }) {
+  const mine = classes.filter((c) => c.enrolled !== false);
+  const pending = mine.reduce((s, c) => s + Number(c.pending_count || 0), 0);
+  const done = mine.reduce((s, c) => s + Number(c.doneTasks ?? c.done_count ?? 0), 0);
+  const total = mine.reduce((s, c) => s + Number(c.totalTasks ?? c.total_assignments ?? 0), 0);
+  const nearest = mine
+    .map((c) => ({ c, at: c.nextUrgent?.closeAt ?? c.next_deadline ?? null }))
+    .filter((x) => x.at && x.at > Date.now())
+    .sort((a, b) => (a.at as number) - (b.at as number))[0];
+  const dl = nearest ? formatDeadlineShort(nearest.at) : null;
+  return (
+    <div className="sc-summary">
+      <div className={`sc-sum ${pending ? 'is-warn' : 'is-good'}`}>
+        <span>Bài cần làm</span>
+        <b>{pending}</b>
+      </div>
+      <div className={`sc-sum ${dl?.urgent ? 'is-bad' : ''}`}>
+        <span>Hạn gần nhất</span>
+        <b className="sc-sum-small">{dl ? dl.label : 'Không có'}</b>
+        {nearest?.c.nextUrgent?.title && <small>{nearest.c.nextUrgent.title}</small>}
+      </div>
+      <div className="sc-sum">
+        <span>Đã hoàn thành</span>
+        <b>{done}<small>/{total}</small></b>
+      </div>
     </div>
   );
 }

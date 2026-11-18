@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  Dumbbell,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -100,6 +101,8 @@ export function TopicStudyWorkspace({
 }: TopicStudyWorkspaceProps) {
   const { toast } = useApp();
   const [stageTab, setStageTab] = useState<StageTab>('theory');
+  // Vào chuyên đề: chọn Lý thuyết hay Luyện tập trước, bên trong vẫn chuyển qua lại được
+  const [view, setView] = useState<'choose' | 'theory' | 'practice'>('choose');
   const [customCount, setCustomCount] = useState<number>(10);
 
   // Tự nhẩm công thức (Active Recall)
@@ -127,6 +130,7 @@ export function TopicStudyWorkspace({
 
   useEffect(() => {
     setStageTab('theory');
+    setView('choose');
     setRevealedFormulas({});
     setRecallMode(false);
     setQuickItem(null);
@@ -370,35 +374,50 @@ export function TopicStudyWorkspace({
             </div>
           </div>
 
-          <div className="su-pills" role="group" aria-label="Số câu luyện" style={{ flexWrap: 'nowrap' }}>
-            {[5, 10, 15, 20].map((n) => (
-              <button key={n} type="button" className={`su-pill ${customCount === n ? 'on' : ''}`} onClick={() => setCustomCount(n)} style={{ flex: 1 }}>
-                {n} câu
-              </button>
-            ))}
-          </div>
-          <button type="button" className="btn primary" disabled={busy} onClick={() => onStartPractice([topic.code], customCount)} style={{ width: '100%', justifyContent: 'center' }}>
-            <Play size={15} aria-hidden="true" />
-            {busy ? 'Đang tạo đề…' : `Luyện ${customCount} câu chuyên đề này`}
-          </button>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" className="su-link" onClick={() => onTogglePick(topic.code)}>
-              {isPicked ? 'Đã thêm vào luyện kết hợp' : '+ Luyện kết hợp nhiều chủ đề'}
-            </button>
-            {pickedCount > 0 && onStartPickedPractice && (
-              <button type="button" className="su-link" disabled={busy} onClick={() => onStartPickedPractice(customCount)}>
-                Luyện {pickedCount} chủ đề đã chọn
-              </button>
-            )}
-          </div>
         </div>
       </section>
 
       {/* 3. Khung nội dung học tập 2 cột (66% Chính / 34% Điều khiển) */}
-      <div className="su-topic-body">
+      {/* 3. Chọn hướng học: Lý thuyết hay Luyện tập */}
+      <div className="tw-switch" role="tablist" aria-label="Chọn cách học">
+        <button type="button" role="tab" aria-selected={view === 'theory'} className={`tw-choice is-theory ${view === 'theory' ? 'on' : ''}`} onClick={() => setView('theory')}>
+          <span className="tw-choice-icon"><BookOpen size={22} aria-hidden="true" /></span>
+          <span className="tw-choice-text">
+            <strong>Lý thuyết</strong>
+            <small>
+              {curriculum?.formulas?.length ?? 0} mục kiến thức · {curriculum?.examples?.length ?? 0} ví dụ · {curriculum?.commonTraps?.length ?? 0} bẫy sai
+            </small>
+          </span>
+          {view === 'choose' && <span className="tw-choice-go">Đọc bài →</span>}
+        </button>
+        <button type="button" role="tab" aria-selected={view === 'practice'} className={`tw-choice is-practice ${view === 'practice' ? 'on' : ''}`} onClick={() => setView('practice')}>
+          <span className="tw-choice-icon"><Dumbbell size={22} aria-hidden="true" /></span>
+          <span className="tw-choice-text">
+            <strong>Luyện tập</strong>
+            <small>
+              {isBankTopic ? `${questionCount} câu có sẵn` : 'Câu hỏi theo chuyên đề'}
+              {pctVal !== null ? ` · đang đúng ${pctVal}%` : ' · chưa làm câu nào'}
+            </small>
+          </span>
+          {view === 'choose' && <span className="tw-choice-go">Bắt đầu →</span>}
+        </button>
+      </div>
+      {view === 'choose' && (
+        <p className="tw-hint">
+          {pctVal === null
+            ? 'Gợi ý: chuyên đề mới, nên đọc lý thuyết trước rồi mới luyện.'
+            : pctVal < 50
+            ? 'Gợi ý: em đang đúng dưới 50%, nên xem lại lý thuyết và bẫy sai trước khi luyện tiếp.'
+            : 'Gợi ý: em đã nắm khá, vào luyện tập để giữ và tăng độ thành thạo.'}
+        </p>
+      )}
+
+
+      {view !== 'choose' && (<div className="su-topic-body">
         {/* CỘT CHÍNH: Nội dung học tập */}
         <section className="ss-content-stage" aria-label="Nội dung bài học">
           <div className="ss-stage-body">
+            {view === 'theory' && (<>
             <div className="su-section-head">
               <h2>Kiến thức &amp; công thức</h2>
               {curriculum?.formulas?.length ? (
@@ -613,6 +632,35 @@ export function TopicStudyWorkspace({
                 </div>
               </div>
             )}
+            </>)}
+            {view === 'practice' && (<>
+            <div className="su-section-head"><h2>Luyện theo chuyên đề</h2></div>
+            <div className="tw-practice-box">
+            <div className="su-pills" role="group" aria-label="Số câu luyện" style={{ flexWrap: 'nowrap' }}>
+              {[5, 10, 15, 20].map((n) => (
+                <button key={n} type="button" className={`su-pill ${customCount === n ? 'on' : ''}`} onClick={() => setCustomCount(n)} style={{ flex: 1 }}>
+                  {n} câu
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn primary" disabled={busy} onClick={() => onStartPractice([topic.code], customCount)} style={{ width: '100%', justifyContent: 'center' }}>
+              <Play size={15} aria-hidden="true" />
+              {busy ? 'Đang tạo đề…' : `Luyện ${customCount} câu chuyên đề này`}
+            </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="su-link" onClick={() => onTogglePick(topic.code)}>
+                {isPicked ? 'Đã thêm vào luyện kết hợp' : '+ Luyện kết hợp nhiều chủ đề'}
+              </button>
+              {pickedCount > 0 && onStartPickedPractice && (
+                <button type="button" className="su-link" disabled={busy} onClick={() => onStartPickedPractice(customCount)}>
+                  Luyện {pickedCount} chủ đề đã chọn
+                </button>
+              )}
+            </div>
+              <button type="button" className="btn" onClick={() => go('/so-tay-loi-sai')} style={{ width: '100%', justifyContent: 'center' }}>
+                Ôn lại các câu đã sai
+              </button>
+            </div>
             <div className="su-section-head"><h2>Thử nhanh từng câu</h2>{sessionStats.tried > 0 && <span className="su-row-meta" style={{ margin: 0 }}>Đúng {sessionStats.correct}/{sessionStats.tried} câu</span>}</div>
             {true && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -706,10 +754,11 @@ export function TopicStudyWorkspace({
               </div>
             )}
 
+            </>)}
           </div>
         </section>
 
-      </div>
+      </div>)}
 
       {/* 4. Thanh điều hướng bài học cuối trang */}
       <nav className="ss-lesson-footer-nav" aria-label="Điều hướng giữa các bài học">

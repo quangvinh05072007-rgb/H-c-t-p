@@ -175,6 +175,8 @@ const ADDED_COLUMNS = [
   ['attempts', 'mode', 'TEXT'],
   ['attempts', 'flagged_json', 'TEXT'],
   ['questions', 'form', 'TEXT'],
+  ['exams', 'category', 'TEXT'],
+  ['attempts', 'exam_id', 'INTEGER'],
 ];
 
 export function migrate(db) {

@@ -51,12 +51,15 @@ Câu trùng hệt (cùng loại, cùng đề bài) với câu đã có trong ng�
 ## Đề thi — `exams`
 
 ```json
-{ "title": "Đề khảo sát lần 1", "durationMin": 90, "variants": 4, "questions": ["c1", "c2", "c3"], "shareWithSchool": true }
+{ "title": "Đề khảo sát lần 1", "category": "khao-sat", "durationMin": 90, "variants": 4, "questions": ["c1", "c2", "c3"], "shareWithSchool": true }
 ```
 
 - `questions`: các `id` câu **trong cùng gói**, đúng thứ tự trên đề.
 - `durationMin` 5–240 (mặc định 90); `variants` 1–24 mã đề (mặc định 4).
 - `shareWithSchool: false` để đề chỉ mình bạn thấy.
+- `category` (không bắt buộc): loại đề để học sinh tìm theo nhóm — `"giua-ky"` Giữa kỳ, `"cuoi-ky"` Cuối kỳ,
+  `"thpt"` Thi tốt nghiệp THPT, `"khao-sat"` Khảo sát · Thi thử, `"kiem-tra"` Kiểm tra ngắn, `"on-tap"` Ôn tập chuyên đề.
+  Bỏ trống thì app đoán theo tên đề.
 - Đề chỉ được tạo khi mọi câu của nó **đã duyệt**: chọn *Duyệt luôn các câu hợp lệ* khi nhập (trường dùng chính sách hai
   người duyệt thì câu luôn vào dạng nháp, duyệt xong mới ghép đề).
 

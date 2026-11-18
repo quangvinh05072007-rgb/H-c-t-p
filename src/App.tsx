@@ -1,6 +1,7 @@
 import { Component, ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import {
   BarChart3,
+  LineChart,
   BookOpen,
   BookmarkCheck,
   ChevronRight,
@@ -56,6 +57,7 @@ import { Family } from './pages/Family';
 import { InstallApp } from './ui/InstallApp';
 import { ClassWorkspace } from './pages/teacher/ClassWorkspace';
 import { StudentResults } from './pages/student/StudentResults';
+import { StudentProfile } from './pages/student/StudentProfile';
 import { VariantShuffler } from './pages/teacher/VariantShuffler';
 import { TeacherNotifications } from './ui/TeacherNotifications';
 
@@ -293,7 +295,8 @@ export function App() {
           ['/thi/:id', ([id]) => <ExamRoom key={id} attemptId={Number(id)} />],
           ['/ket-qua/:id/dap-an', ([id]) => <AnswerReviewRoom key={id} attemptId={Number(id)} />],
           ['/ket-qua/:id', ([id]) => <ResultPage key={id} attemptId={Number(id)} />],
-          ['/ket-qua', () => <StudentResults key="results" />],
+          ['/ho-so', () => <StudentProfile key="profile" />],
+          ['/ket-qua', () => <StudentProfile key="profile" />],
           ['/tien-bo', () => <StudentResults key="progress" initial="progress" />],
           ['/khieu-nai', () => <StudentResults key="appeals" initial="appeals" />],
           ['/tai-khoan', () => <Account onLogout={logout} />],
@@ -383,7 +386,7 @@ export function App() {
     '/ghi-chu',
   ]);
   const isStudentStudyActive = pathMatchesAny(path, ['/tu-hoc', '/ban-do-tri-thuc', '/mon-hoc', '/hoc-phan', '/on-tap', '/chuyen-de', '/luyen-vo-han', '/nhiem-vu']);
-  const isStudentResultsActive = pathMatchesAny(path, ['/ket-qua', '/tien-bo', '/khieu-nai']);
+  const isStudentResultsActive = pathMatchesAny(path, ['/ho-so', '/ket-qua', '/tien-bo', '/khieu-nai']);
 
   const librarySubItems: SubItem[] = [
     { path: '/thu-vien', label: 'Kho đề', icon: FolderOpen },
@@ -440,7 +443,7 @@ export function App() {
     { path: '/luyen-tap', label: 'Đề thi', icon: ClipboardList, active: isStudentExamsActive },
     { path: '/tu-hoc', label: 'Tự học', icon: BookOpen, active: isStudentStudyActive },
     { path: '/lop-hoc', label: 'Lớp học', icon: GraduationCap, active: isClassesActive },
-    { path: '/ket-qua', label: 'Kết quả', icon: BarChart3, active: isStudentResultsActive },
+    { path: '/ho-so', label: 'Hồ sơ', icon: LineChart, active: isStudentResultsActive },
   ];
 
   const getSearchItems = () => {
@@ -451,6 +454,7 @@ export function App() {
         { title: 'Sổ tay lỗi sai', desc: 'Xem lại câu làm sai, ghi chú và ôn lại', path: '/so-tay-loi-sai', icon: BookmarkCheck },
         { title: 'Tự học kiến thức', desc: 'Chuyên đề, công thức & bài tập', path: '/tu-hoc', icon: BookOpen },
         { title: 'Lớp học của tôi', desc: 'Học phần, bài kiểm tra & điểm số', path: '/lop-hoc', icon: GraduationCap },
+        { title: 'Hồ sơ học tập', desc: 'Xu hướng điểm, lịch sử & vấn đề cần chú ý', path: '/ho-so', icon: LineChart },
         { title: 'Tài khoản cá nhân', desc: 'Thông tin cá nhân & giao diện', path: '/tai-khoan', icon: UserIcon },
       ];
     }

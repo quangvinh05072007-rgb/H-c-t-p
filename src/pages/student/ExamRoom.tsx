@@ -313,7 +313,7 @@ export function ExamRoom({ attemptId }: { attemptId: number }) {
 
   const remaining = att?.deadlineAt ? att.deadlineAt - (now + offset.current) : null;
   useEffect(() => {
-    if (remaining !== null && remaining <= 0 && att?.kind === 'assignment' && !finished.current && !submitting) submit(true);
+    if (remaining !== null && remaining <= 0 && (att?.kind === 'assignment' || att?.mode === 'mock' || att?.mode === 'timed') && !finished.current && !submitting) submit(true);
   }, [remaining, att, submit, submitting]);
 
   const check = async () => {
@@ -336,7 +336,7 @@ export function ExamRoom({ attemptId }: { attemptId: number }) {
     if (!att) return;
     const currentItem = att.items[cur];
     if (!currentItem) return;
-    const isPracticeMode = att.kind === 'practice' && att.mode !== 'mock';
+    const isPracticeMode = att.kind === 'practice' && att.mode !== 'mock' && att.mode !== 'timed';
     const hasReview = Boolean(checks[currentItem.qid]);
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -378,8 +378,10 @@ export function ExamRoom({ attemptId }: { attemptId: number }) {
   const it = att.items[cur];
   const answered = att.items.filter((x) => isAnswered(x.type, responses[x.qid])).length;
   // Thi thử THPT là bài luyện cá nhân nhưng làm như thi thật: tính giờ, không xem đáp án giữa chừng
+  // Thi thật (đề trong kho, chọn chế độ thi thật) cũng vậy
   const isMock = att.mode === 'mock';
-  const isPractice = att.kind === 'practice' && !isMock;
+  const isTimed = isMock || att.mode === 'timed';
+  const isPractice = att.kind === 'practice' && !isTimed;
   const checkInfo = checks[it.qid];
   const review: Review | null = checkInfo ? { ...checkInfo } : null;
   const unanswered = att.items.length - answered;
@@ -404,7 +406,7 @@ export function ExamRoom({ attemptId }: { attemptId: number }) {
           <div className="exam-info-block" style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
               <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: 'var(--primary-soft)', color: 'var(--primary)', textTransform: 'uppercase', flexShrink: 0 }}>
-                {isMock ? 'Thi thử' : isPractice ? 'Luyện tập' : 'Chính thức'}
+                {isMock ? 'Thi thử' : att.mode === 'timed' ? 'Thi thật' : isPractice ? 'Luyện tập' : 'Chính thức'}
               </span>
               <h1 className="exam-main-title" title={att.title} style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
                 {att.title}

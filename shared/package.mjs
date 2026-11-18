@@ -2,6 +2,7 @@
 // (hoặc ZIP chứa JSON + hình). Module này chỉ đọc, chuẩn hóa và kiểm tra — không chạm CSDL.
 // Đặc tả cho người soạn gói: docs/goi-nhap.md.
 
+import { cleanCategory, EXAM_CATEGORY_CODES } from './examCategory.mjs';
 import { TOPIC_BY_CODE } from './topics.mjs';
 
 export const PACKAGE_FORMAT = 'smartexam-package';
@@ -141,7 +142,9 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
     const variants = Math.round(Number(e?.variants ?? 4));
     if (!(variants >= 1 && variants <= 24)) problems.push('"variants" phải từ 1 đến 24');
     if (problems.length) return errors.push({ where, message: problems.join('; ') + '.' });
-    exams.push({ title, keys, durationMin, variants, shareWithSchool: e?.shareWithSchool !== false });
+    const category = e?.category == null || e.category === '' ? null : cleanCategory(e.category);
+    if (e?.category && !category) problems.push(`"category" phải là một trong: ${EXAM_CATEGORY_CODES.join(', ')}`);
+    exams.push({ title, keys, durationMin, variants, category, shareWithSchool: e?.shareWithSchool !== false });
   });
 
   // ---- Bài học Tự học ----
@@ -222,7 +225,7 @@ export function samplePackage() {
         explanation: '$\\int_0^1 2x\\,dx = x^2\\big|_0^1 = 1$.',
       },
     ],
-    exams: [{ title: 'Đề mẫu từ gói nhập', durationMin: 15, variants: 2, questions: ['c1', 'c2', 'c3'], shareWithSchool: true }],
+    exams: [{ title: 'Đề mẫu từ gói nhập', category: 'kiem-tra', durationMin: 15, variants: 2, questions: ['c1', 'c2', 'c3'], shareWithSchool: true }],
     lessons: [
       {
         topic: 'T12.NGUYENHAM',

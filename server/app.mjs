@@ -17,6 +17,8 @@ import { diagnoseAttempt, diagnoseItem, computeMastery, recommend, selectPractic
 import { examToDocx, crossAnswerKey } from '../shared/exportExam.mjs';
 import { examToPdf } from '../shared/exportExamPdf.mjs';
 import { sniffImage } from '../shared/docx.mjs';
+import { cleanCategory, examCategory, CATEGORY_LABEL } from '../shared/examCategory.mjs';
+import { buildInsights } from '../shared/insights.mjs';
 import { exportAnswerSheetDocx } from '../shared/exportAnswerSheetDocx.mjs';
 import { TOPICS, TOPIC_BY_CODE, LEVELS, SOURCES, SOURCE_HINT, ERROR_TYPES, QUESTION_TYPES } from '../shared/topics.mjs';
 import { CSV_TEMPLATE, SHEET_HEADERS } from '../shared/sheet.mjs';
@@ -1285,9 +1287,9 @@ export function createApp(config = {}) {
         const variants = makeVariants(norm, e.variants, `${user.id}-${now()}-${e.title}`);
         const counts = norm.reduce((acc, x) => ((acc[x.type] = (acc[x.type] ?? 0) + 1), acc), { mcq: 0, tf: 0, short: 0 });
         const r = db.run(
-          'INSERT INTO exams (school_id, title, blueprint_json, items_json, duration_min, variants_json, snapshot_json, created_by, created_at, visibility, dept) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+          'INSERT INTO exams (school_id, title, blueprint_json, items_json, duration_min, variants_json, snapshot_json, created_by, created_at, visibility, dept, category) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
           user.school_id, e.title, JSON.stringify({ counts, durationMin: e.durationMin, origin }), JSON.stringify(norm), e.durationMin,
-          JSON.stringify(variants), JSON.stringify(qmap), user.id, now(), e.shareWithSchool ? 'school' : 'private', 'Toán',
+          JSON.stringify(variants), JSON.stringify(qmap), user.id, now(), e.shareWithSchool ? 'school' : 'private', 'Toán', e.category ?? null,
         );
         exams.push({ id: Number(r.lastInsertRowid), title: e.title });
       }
@@ -1549,7 +1551,7 @@ export function createApp(config = {}) {
     const norm = items.map((x) => ({ qid: Number(x.qid), type: qmap[x.qid].type, topic: qmap[x.qid].topic, level: qmap[x.qid].level, group: qmap[x.qid].group_id ?? null, fixedOptions: imageOptions(qmap[x.qid]) }));
     const variants = makeVariants(norm, Number(body.variants) || 4, body.seed ?? `${user.id}-${now()}`);
     const r = db.run(
-      'INSERT INTO exams (school_id, title, blueprint_json, items_json, duration_min, variants_json, snapshot_json, created_by, created_at, visibility, dept) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO exams (school_id, title, blueprint_json, items_json, duration_min, variants_json, snapshot_json, created_by, created_at, visibility, dept, category) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
       user.school_id,
       String(body.title).trim(),
       JSON.stringify(body.blueprint ?? {}),
@@ -1561,9 +1563,20 @@ export function createApp(config = {}) {
       now(),
       body.visibility === 'school' ? 'school' : 'private',
       body.dept ? String(body.dept).trim().slice(0, 40) : null,
+      cleanCategory(body.category),
     );
     audit(user, 'exam_create', `#${r.lastInsertRowid} ${body.title}`, ip);
     return { id: Number(r.lastInsertRowid) };
+  });
+  route('PUT', '/api/exams/:id/category', STAFF, ({ user, params, body, ip }) => {
+    const e = db.get('SELECT id, school_id, created_by, title FROM exams WHERE id = ?', params.id);
+    if (!e || e.school_id !== user.school_id) fail(404, 'Không tìm thấy đề.');
+    if (e.created_by !== user.id && user.role !== 'admin') deny(user, 'exam_edit', `exam:${e.id}`, 'Chỉ người tạo đề hoặc quản lý mới đổi được loại đề.', ip);
+    const category = cleanCategory(body.category);
+    if (body.category && !category) fail(400, 'Loại đề không hợp lệ.');
+    db.run('UPDATE exams SET category = ? WHERE id = ?', category, e.id);
+    audit(user, 'exam_category', `#${e.id} → ${category ?? 'tự đoán'}`, ip);
+    return { ok: true, category: examCategory(category, e.title, 90) };
   });
   route('PUT', '/api/exams/:id', STAFF, ({ user, params, body, ip }) => {
     const e = db.get('SELECT * FROM exams WHERE id = ?', params.id);
@@ -1605,7 +1618,7 @@ export function createApp(config = {}) {
   // Đề xem được: của mình + đề dùng chung của trường. "Hot" = lượt dùng (giao bài + nhân bản) và đánh giá sao, có trọng số theo số người đánh giá.
   route('GET', '/api/exams', STAFF, ({ user, query }) => {
     const rows = db.all(
-      `SELECT e.id, e.title, e.items_json, e.duration_min, e.created_at, e.visibility, e.dept, e.created_by, u.display_name author,
+      `SELECT e.id, e.title, e.items_json, e.duration_min, e.created_at, e.visibility, e.dept, e.category, e.created_by, u.display_name author,
          (SELECT COUNT(*) FROM assignments a WHERE a.exam_id = e.id) assigned,
          (SELECT COUNT(*) FROM exams c WHERE c.parent_id = e.id) clones,
          (SELECT AVG(stars) FROM exam_ratings r WHERE r.exam_id = e.id) stars,
@@ -1625,6 +1638,8 @@ export function createApp(config = {}) {
       mine: e.created_by === user.id,
       visibility: e.visibility,
       dept: e.dept,
+      category: examCategory(e.category, e.title, e.duration_min),
+      categorySet: Boolean(cleanCategory(e.category)),
       uses: e.assigned + e.clones,
       ratingAvg: e.stars === null ? null : Math.round(e.stars * 10) / 10,
       ratingCount: e.rated,
@@ -1688,7 +1703,7 @@ export function createApp(config = {}) {
     const e = visibleExam(user, params.id);
     const rating = db.get('SELECT AVG(stars) avg, COUNT(*) n FROM exam_ratings WHERE exam_id = ?', e.id);
     return { exam: { id: e.id, title: e.title, durationMin: e.duration_min, items: e.items, variants: e.variants.map((v) => v.code), blueprint: e.blueprint,
-      mine: e.created_by === user.id, visibility: e.visibility, dept: e.dept, author: db.get('SELECT display_name FROM users WHERE id = ?', e.created_by)?.display_name,
+      mine: e.created_by === user.id, visibility: e.visibility, dept: e.dept, category: examCategory(e.category, e.title, e.duration_min), categorySet: Boolean(cleanCategory(e.category)), author: db.get('SELECT display_name FROM users WHERE id = ?', e.created_by)?.display_name,
       ratingAvg: rating.avg === null ? null : Math.round(rating.avg * 10) / 10, ratingCount: rating.n,
       myRating: db.get('SELECT stars FROM exam_ratings WHERE exam_id = ? AND user_id = ?', e.id, user.id)?.stars ?? null,
     }, questions: e.snapshot };
@@ -3411,89 +3426,110 @@ export function createApp(config = {}) {
   // ---- tự luyện đề (kho đề khảo sát năng lực 2026 đa môn phong phú) ----
   route('GET', '/api/student/practice-exams', ['student'], ({ user }) => {
     const rows = db.all(
-      `SELECT e.id, e.title, e.duration_min, e.blueprint_json, e.items_json, e.variants_json, e.dept, e.created_at, u.display_name author
+      `SELECT e.id, e.title, e.duration_min, e.blueprint_json, e.items_json, e.variants_json, e.dept, e.category, e.created_at, u.display_name author
        FROM exams e
        LEFT JOIN users u ON u.id = e.created_by
        WHERE e.school_id = ? AND (e.visibility = 'school' OR e.visibility IS NULL)
        ORDER BY e.id DESC`,
       user.school_id,
     );
-
-
     const attempts = db.all(
-      `SELECT id, title, score10, status, started_at, submitted_at
+      `SELECT id, exam_id, title, mode, score10, status, started_at, submitted_at
        FROM attempts
-       WHERE student_id = ? AND kind = 'practice'
+       WHERE student_id = ? AND kind = 'practice' AND (mode IS NULL OR mode != 'mock')
        ORDER BY started_at DESC`,
       user.id,
     );
-    const attemptByTitle = {};
-    const attemptCountByTitle = {};
+    // Ghép lần làm với đề theo mã đề; bản ghi cũ (trước khi có exam_id) mới ghép theo tên
+    const byExam = {};
+    const titleToId = {};
+    for (const e of rows) if (!(e.title in titleToId)) titleToId[e.title] = e.id;
     for (const att of attempts) {
-      if (!attemptByTitle[att.title]) attemptByTitle[att.title] = att;
-      attemptCountByTitle[att.title] = (attemptCountByTitle[att.title] ?? 0) + 1;
+      const eid = att.exam_id ?? titleToId[att.title];
+      if (!eid) continue;
+      (byExam[eid] ??= []).push(att);
     }
+    const popularity = Object.fromEntries(
+      db.all(
+        `SELECT exam_id, COUNT(DISTINCT student_id) n FROM attempts WHERE school_id = ? AND exam_id IS NOT NULL AND kind = 'practice' GROUP BY exam_id`,
+        user.school_id,
+      ).map((r) => [r.exam_id, r.n]),
+    );
     const exams = rows.map((e) => {
       const items = e.items ?? [];
       const blueprint = e.blueprint ?? {};
-      const subject = e.dept || 'Toán';
-      const att = attemptByTitle[e.title] ?? null;
-      const mcqCount = items.filter((x) => x.type === 'mcq').length || blueprint.counts?.mcq || 12;
-      const tfCount = items.filter((x) => x.type === 'tf').length || blueprint.counts?.tf || 4;
-      const shortCount = items.filter((x) => x.type === 'short').length || blueprint.counts?.short || 6;
-      const qCount = items.length || (mcqCount + tfCount + shortCount);
+      const mcq = items.filter((x) => x.type === 'mcq').length;
+      const tf = items.filter((x) => x.type === 'tf').length;
+      const short = items.filter((x) => x.type === 'short').length;
       const dur = e.duration_min || blueprint.durationMin || 90;
-      let category = 'Cấu trúc 2026 BGD';
-      if (/TSA|Đánh Giá Tư Duy|HSA/i.test(e.title)) category = 'Đánh giá Tư duy TSA';
-      else if (/Sở|Chuyên|Thi Thử/i.test(e.title)) category = 'Thi thử Sở & Chuyên';
-      else if (dur <= 45 || /15 phút|30 phút|Về Nhà/i.test(e.title)) category = 'Đề ngắn 15–45 phút';
-
+      const list = byExam[e.id] ?? [];
+      const done = list.filter((a) => a.status !== 'in_progress');
+      const scored = done.filter((a) => a.score10 !== null);
+      const timed = scored.filter((a) => a.mode === 'timed');
+      const inProgress = list.find((a) => a.status === 'in_progress') ?? null;
+      const category = examCategory(e.category, e.title, dur);
+      const topics = [...new Set(items.map((x) => x.topic).filter(Boolean))];
       return {
         id: e.id,
         title: e.title,
-        subject,
+        subject: e.dept || 'Toán',
         category,
+        categoryLabel: CATEGORY_LABEL[category],
+        grade: topics.length && topics.every((t) => t.startsWith(topics[0].slice(0, 3))) ? Number(topics[0].slice(1, 3)) || null : null,
+        topics,
+        createdAt: e.created_at,
         durationMin: dur,
-        questionCount: qCount,
-        counts: { mcq: mcqCount, tf: tfCount, short: shortCount },
-        variantCount: Array.isArray(e.variants) ? e.variants.length : 4,
-        author: e.author || 'Hội đồng Bộ môn',
-        completed: !!(att && att.status && att.status !== 'in_progress'),
-        inProgress: !!(att && att.status === 'in_progress'),
-        attemptCount: attemptCountByTitle[e.title] ?? 0,
-        score10: att?.score10 ?? null,
-        attemptId: att?.id ?? null,
+        questionCount: items.length,
+        counts: { mcq, tf, short },
+        author: e.author || 'Tổ Toán',
+        completed: done.length > 0,
+        inProgress: Boolean(inProgress),
+        inProgressId: inProgress?.id ?? null,
+        inProgressMode: inProgress ? (inProgress.mode === 'timed' ? 'timed' : 'practice') : null,
+        attemptCount: done.length,
+        schoolAttemptCount: popularity[e.id] ?? 0,
+        bestScore: scored.length ? Math.max(...scored.map((a) => a.score10)) : null,
+        bestTimedScore: timed.length ? Math.max(...timed.map((a) => a.score10)) : null,
+        score10: scored[0]?.score10 ?? null,
+        attemptId: done[0]?.id ?? null,
+        history: done.slice(0, 6).map((a) => ({ id: a.id, mode: a.mode === 'timed' ? 'timed' : 'practice', score10: a.score10, at: a.submitted_at ?? a.started_at })),
       };
     });
-    const completedCount = exams.filter((x) => x.completed).length;
-    return {
-      exams,
-      totalCount: exams.length,
-      completedCount,
-    };
+    return { exams, totalCount: exams.length, completedCount: exams.filter((x) => x.completed).length };
   });
 
+  // Học sinh làm đề trong kho: "practice" = luyện tập (không ép giờ, xem đáp án từng câu),
+  // "timed" = thi thật (tính giờ theo đề, chỉ xem đáp án sau khi nộp)
   route('POST', '/api/student/practice-exams/start', ['student'], ({ user, body, ip }) => {
     const examId = posInt(body.examId);
     if (!examId) fail(400, 'Thiếu mã đề thi.');
+    const mode = body.mode === 'timed' ? 'timed' : 'practice';
     const exam = db.get("SELECT * FROM exams WHERE id = ? AND school_id = ? AND (visibility = 'school' OR visibility IS NULL)", examId, user.school_id);
     if (!exam) fail(404, 'Không tìm thấy đề thi.');
-    const t = now();
     const items = exam.items && exam.items.length ? exam.items : [];
     if (!items.length) fail(400, 'Đề thi chưa có câu hỏi.');
+    // Đang làm dở đúng chế độ này thì vào lại bài cũ, không tạo bài mới
+    const open = db.get("SELECT * FROM attempts WHERE student_id = ? AND exam_id = ? AND kind = 'practice' AND status = 'in_progress' AND COALESCE(mode, 'practice') = ? ORDER BY id DESC LIMIT 1", user.id, exam.id, mode === 'timed' ? 'timed' : 'practice');
+    if (open) {
+      const cur = finalizeIfExpired(open);
+      if (cur.status === 'in_progress') return attemptView(cur);
+    }
+    const t = now();
     const layout = makeVariant(items, `pe-${user.id}-${exam.id}-${t}`);
     const dur = exam.duration_min || 90;
     const r = db.run(
-      'INSERT INTO attempts (school_id, student_id, kind, title, layout_json, started_at, deadline_at) VALUES (?,?,?,?,?,?,?)',
+      'INSERT INTO attempts (school_id, student_id, kind, title, layout_json, started_at, deadline_at, mode, exam_id) VALUES (?,?,?,?,?,?,?,?,?)',
       user.school_id,
       user.id,
       'practice',
       exam.title,
       JSON.stringify(layout),
       t,
-      t + dur * 60000,
+      mode === 'timed' ? t + dur * 60000 : null,
+      mode === 'timed' ? 'timed' : null,
+      exam.id,
     );
-    audit(user, 'practice_exam_start', `Đề #${exam.id}: ${exam.title}`, ip);
+    audit(user, 'practice_exam_start', `Đề #${exam.id} (${mode === 'timed' ? 'thi thật' : 'luyện tập'}): ${exam.title}`, ip);
     return attemptView(getAttempt(Number(r.lastInsertRowid)));
   });
   // Chỉ dữ liệu của chính học sinh đang đăng nhập (không nhận mã học sinh từ đường dẫn).
@@ -3611,7 +3647,19 @@ export function createApp(config = {}) {
   route('GET', '/api/attempts/:id/result', ['student'], ({ user, params }) => {
     const att = finalizeIfExpired(ownAttempt(user, params.id));
     if (att.status === 'in_progress') fail(403, 'Em chưa nộp bài này.');
-    return attemptView(att);
+    const view = attemptView(att);
+    // Lần làm trước của cùng đề (để so tiến bộ) và điểm mục tiêu của em
+    const prev = view.result && view.scoreVisible !== false
+      ? db.get(
+          `SELECT id, score10, submitted_at FROM attempts
+           WHERE student_id = ? AND id != ? AND status != 'in_progress' AND score10 IS NOT NULL AND submitted_at < ?
+             AND ((? IS NOT NULL AND exam_id = ?) OR (? IS NOT NULL AND assignment_id = ?) OR (exam_id IS NULL AND assignment_id IS NULL AND title = ?))
+           ORDER BY submitted_at DESC LIMIT 1`,
+          user.id, att.id, att.submitted_at ?? now(), att.exam_id, att.exam_id, att.assignment_id, att.assignment_id, att.title,
+        )
+      : null;
+    const target = db.get('SELECT target_score FROM users WHERE id = ?', user.id)?.target_score ?? null;
+    return { ...view, previous: prev ? { id: prev.id, score10: prev.score10, at: prev.submitted_at } : null, targetScore: target };
   });
   route('POST', '/api/attempts/:id/retake', ['student'], ({ user, params, ip }) => {
     const old = ownAttempt(user, params.id);
@@ -4215,6 +4263,82 @@ export function createApp(config = {}) {
   }
   route('GET', '/api/student/goal', ['student'], ({ user }) => goalPlan(user));
 
+  // Hồ sơ học tập: xu hướng điểm, lịch sử, bản đồ chuyên đề, kiểu lỗi và các vấn đề phát hiện theo quy tắc
+  route('GET', '/api/student/profile', ['student'], ({ user }) => {
+    const t = now();
+    const rows = db.all(
+      `SELECT a.id, a.kind, a.mode, a.title, a.status, a.score10, a.started_at, a.submitted_at, a.assignment_id, a.exam_id, a.layout_json, a.result_json,
+              c.name class_name
+       FROM attempts a
+       LEFT JOIN assignments s ON s.id = a.assignment_id
+       LEFT JOIN classes c ON c.id = s.class_id
+       WHERE a.student_id = ? AND a.status != 'in_progress'
+       ORDER BY COALESCE(a.submitted_at, a.started_at) DESC LIMIT 120`,
+      user.id,
+    );
+    const kindOf = (a) => (a.mode === 'mock' ? 'mock' : a.mode === 'timed' ? 'timed' : a.kind === 'assignment' ? 'assignment' : 'practice');
+    const history = rows.map((a) => {
+      const visible = visibilityFor(a).scoreVisible;
+      return {
+        id: a.id,
+        title: a.title || 'Bài luyện',
+        type: kindOf(a),
+        className: a.class_name ?? null,
+        at: a.submitted_at ?? a.started_at,
+        score10: visible ? a.score10 : null,
+        hidden: !visible,
+        questions: (a.layout ?? []).length,
+      };
+    });
+    // Điểm để vẽ xu hướng: chỉ bài đủ dài (≥ 5 câu), đã công bố
+    const scores = history.filter((h) => h.score10 !== null && h.questions >= 5).slice(0, 40).reverse().map((h) => ({ id: h.id, at: h.at, score10: h.score10, type: h.type, title: h.title }));
+    const recentResults = rows
+      .filter((a) => a.result?.items && visibilityFor(a).answersVisible)
+      .slice(0, 5)
+      .map((a) => {
+        const typeOf = Object.fromEntries((a.layout ?? []).map((x) => [x.qid, x.type]));
+        return { items: a.result.items.map((x) => ({ type: typeOf[x.qid] ?? 'mcq', blank: x.diagnosis?.kind === 'blank' })) };
+      });
+    const evidence = db.all('SELECT topic, level, score, correct, error_type, at FROM evidence WHERE student_id = ? AND at > ?', user.id, t - 90 * 86400000);
+    const activity = db.all('SELECT day, questions, correct FROM activity WHERE student_id = ? AND day >= ?', user.id, dayKey(t - 120 * 86400000));
+    const reviewDue = db.get('SELECT COUNT(*) n FROM review_items WHERE student_id = ? AND due_day <= ?', user.id, dayKey(t)).n;
+    const progress = buildProgress({ evidence, activity, reviewDue, nowMs: t, dayGoal: DAY_GOAL });
+    const goal = goalPlan(user);
+    const accByTopic = Object.fromEntries(progress.topics.map((x) => [x.topic, x]));
+    const topics = TOPICS.map(({ code, grade, name }) => ({
+      code,
+      grade,
+      name,
+      n: accByTopic[code]?.n ?? 0,
+      value: accByTopic[code]?.value ?? null,
+      band: accByTopic[code]?.band ?? null,
+    }));
+    const errCount = {};
+    for (const e of evidence) if (e.error_type && !e.correct && e.at >= t - 30 * 86400000) errCount[e.error_type] = (errCount[e.error_type] ?? 0) + 1;
+    const errors = Object.entries(errCount).sort((a, b) => b[1] - a[1]).map(([type, n]) => ({ type, label: ERROR_TYPES[type]?.label ?? type, n }));
+    const scored = scores.map((x) => x.score10);
+    const last10 = scored.slice(-10);
+    const appealsOpen = db.get("SELECT COUNT(*) n FROM score_appeals p JOIN attempts a ON a.id = p.attempt_id WHERE a.student_id = ? AND p.status = 'open'", user.id)?.n ?? 0;
+    return {
+      summary: {
+        done: history.length,
+        avg10: last10.length ? Math.round((last10.reduce((x, y) => x + y, 0) / last10.length) * 100) / 100 : null,
+        best: scored.length ? Math.max(...scored) : null,
+        streak: progress.streak,
+        weeklyGoal: progress.weeklyGoal,
+        reviewDue,
+        appealsOpen,
+      },
+      target: goal.target,
+      forecast: goal.forecast,
+      scores,
+      history: history.slice(0, 60),
+      topics,
+      errors,
+      insights: buildInsights({ scores, evidence, activity, recentResults, target: goal.target, forecast: goal.forecast?.score ?? null, reviewDue, nowMs: t }),
+    };
+  });
+
   // Mục tiêu điểm & dự báo của học sinh trong lớp (giáo viên xem em nào đang xa mục tiêu)
   route('GET', '/api/classes/:id/goals', STAFF, ({ user, params }) => {
     const cid = Number(params.id);
@@ -4240,7 +4364,7 @@ export function createApp(config = {}) {
     const att = ownAttempt(user, params.id);
     if (att.kind !== 'practice') fail(400, 'Chỉ bài luyện tập mới xem đáp án từng câu.');
     if (att.status !== 'in_progress') fail(400, 'Bài luyện đã kết thúc.');
-    if (att.mode === 'mock') fail(400, 'Bài thi thử không xem đáp án giữa chừng. Nộp bài để xem kết quả.');
+    if (att.mode === 'mock' || att.mode === 'timed') fail(400, 'Bài thi thật không xem đáp án giữa chừng. Nộp bài để xem kết quả.');
     const qid = Number(body.qid);
     const it = att.layout.find((x) => x.qid === qid);
     if (!it) fail(400, 'Câu không thuộc bài này.');

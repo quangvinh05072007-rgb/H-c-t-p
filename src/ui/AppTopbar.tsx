@@ -70,7 +70,7 @@ export function AppTopbar({
         { id: 'mistakes', title: 'Sổ tay lỗi', category: 'Cá nhân hóa', path: '/so-tay-loi-sai', icon: 'edit' },
         { id: 'selfstudy', title: 'Tự học', category: 'Kiến thức', path: '/tu-hoc', icon: 'book' },
         { id: 'classes', title: 'Lớp học', category: 'Lớp học', path: '/lop-hoc', icon: 'class' },
-        { id: 'results', title: 'Kết quả & Phân tích', category: 'Tiến độ', path: '/ket-qua', icon: 'report' },
+        { id: 'results', title: 'Hồ sơ học tập', category: 'Tiến độ', path: '/ho-so', icon: 'report' },
       ];
     }
     if (user.role === 'teacher') {
@@ -136,7 +136,8 @@ export function AppTopbar({
     if (path === '/luyen-vo-han') return [{ label: 'Luyện tập' }];
     if (path === '/ban-do-tri-thuc' || path === '/tu-hoc') return [{ label: 'Tự học' }];
     if (path === '/luyen-tap') return [{ label: 'Đề thi' }];
-    if (path.startsWith('/ket-qua')) return [{ label: 'Kết quả' }];
+    if (path === '/ho-so' || path === '/ket-qua') return [{ label: 'Hồ sơ' }];
+    if (path.startsWith('/ket-qua/')) return [{ label: 'Hồ sơ' }, { label: 'Báo cáo bài làm' }];
     if (path === '/tien-bo') return [{ label: 'Tiến độ' }];
     if (path === '/khieu-nai') return [{ label: 'Khiếu nại' }];
     if (path === '/tai-khoan') return [{ label: 'Cài đặt' }];

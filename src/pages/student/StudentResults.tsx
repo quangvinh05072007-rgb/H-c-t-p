@@ -4,7 +4,7 @@ import { Progress } from './Progress';
 import { MyAppeals } from './MyAppeals';
 
 const TABS: [string, string, string][] = [
-  ['results', 'Bài đã làm', '/ket-qua'],
+  ['results', 'Hồ sơ', '/ho-so'],
   ['progress', 'Câu cần ôn', '/tien-bo'],
   ['appeals', 'Khiếu nại', '/khieu-nai'],
 ];
@@ -14,8 +14,8 @@ export function StudentResults({ initial = 'results' }: { initial?: string }) {
     <div className="su-page">
       <header className="su-head">
         <div>
-          <h1>Kết quả</h1>
-          <p className="su-sub">Điểm, tiến bộ và khiếu nại</p>
+          <h1>{initial === 'appeals' ? 'Khiếu nại' : 'Câu cần ôn'}</h1>
+          <p className="su-sub">{initial === 'appeals' ? 'Khiếu nại điểm đã gửi và kết quả xử lý' : 'Tiến bộ theo chuyên đề và câu đến hạn ôn'}</p>
         </div>
         <nav className="seg" aria-label="Kết quả và tiến bộ">
           {TABS.map(([value, label, href]) => (

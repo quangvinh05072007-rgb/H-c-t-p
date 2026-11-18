@@ -1,6 +1,7 @@
 import { filterExamCatalog } from '../../../shared/exam-catalog.mjs';
 import { useEffect, useState } from 'react';
-import { download, get, post, printHtmlFromApi } from '../../api';
+import { download, get, post, put, printHtmlFromApi } from '../../api';
+import { EXAM_CATEGORIES } from '../../../shared/examCategory.mjs';
 import { MathText } from '../../ui/MathText';
 import { Comments } from '../../ui/Comments';
 import { OmrModal } from '../../ui/OmrModal';
@@ -727,7 +728,7 @@ export function ExamDetail({ id }: { id: number }) {
 
           <details className="card exam-sharing">
             <summary>
-              <span><Icon name="school" /> Chia sẻ & đánh giá</span>
+              <span><Icon name="school" /> Loại đề · Chia sẻ & đánh giá</span>
               <span className={`badge ${exam.visibility === 'school' ? 'blue' : ''}`}>
                 {exam.visibility === 'school' ? 'Đang dùng chung' : 'Đề riêng tư'}
               </span>
@@ -738,6 +739,27 @@ export function ExamDetail({ id }: { id: number }) {
               </p>
               {(exam.mine || user.role === 'admin') && (
                 <>
+                  <label className="field">
+                    Loại đề (học sinh thấy đề trong nhóm này ở mục Đề thi)
+                    <select
+                      className="input"
+                      value={exam.categorySet ? exam.category : ''}
+                      onChange={async (e) => {
+                        try {
+                          await put(`/api/exams/${id}/category`, { category: e.target.value || null });
+                          toast('Đã đổi loại đề.');
+                          reload();
+                        } catch (err: any) {
+                          toast(err.message);
+                        }
+                      }}
+                    >
+                      <option value="">Tự đoán theo tên đề ({EXAM_CATEGORIES.find((c) => c.code === exam.category)?.label})</option>
+                      {EXAM_CATEGORIES.map((c) => (
+                        <option key={c.code} value={c.code}>{c.label}</option>
+                      ))}
+                    </select>
+                  </label>
                   <label className="field">
                     Tổ chuyên môn
                     <input

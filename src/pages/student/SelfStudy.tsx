@@ -8,7 +8,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { get, post } from '../../api';
-import { ErrorBox, go, Loading, useApp, useAsync } from '../../ui/kit';
+import { ErrorBox, go, Loading, useApp, useAsync, useRoute } from '../../ui/kit';
 import {
   getStudyStatusMeta,
   readLastStudiedTopic,
@@ -170,6 +170,16 @@ export function SelfStudy() {
       setMultiPickMode(true);
     }
   }, [picked.length, selectedSubject]);
+
+  // Mở thẳng một chuyên đề từ đường dẫn #/tu-hoc?chuyen-de=MÃ (từ Hồ sơ, báo cáo bài làm…)
+  const { query } = useRoute();
+  const linkedTopic = query.get('chuyen-de');
+  useEffect(() => {
+    if (!linkedTopic || loading || !(meta?.topics ?? []).length) return;
+    openTopicByCode(linkedTopic);
+    history.replaceState(null, '', '#/tu-hoc');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedTopic, loading, meta?.topics?.length]);
 
   if (loading) return <Loading text="Đang tải không gian tự học…" />;
   if (error) return <ErrorBox error={error} onRetry={reload} />;
