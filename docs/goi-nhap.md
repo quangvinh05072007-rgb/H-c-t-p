@@ -4,7 +4,7 @@ App không dùng AI và không tự đọc ảnh hay PDF scan. Đề và tài li
 riêng, hay dùng AI ở máy của bạn) rồi đưa vào app bằng một **gói nhập chuẩn**.
 
 - Chỉ có chữ và công thức → một file **`.json`**.
-- Có hình → một file **`.zip`** chứa `goi.json` và các file hình (`.png`, `.jpg`, `.webp`, mỗi hình ≤ 5 MB).
+- Có hình → một file **`.zip`** chứa `goi.json` và các file hình **`.png` hoặc `.jpg`** (mỗi hình ≤ 5 MB). Hình WebP, GIF, HEIC không được nhận vì không in ra PDF/Word được — hãy lưu lại dạng PNG/JPG.
 - Cả gói tối đa 50 MB, 2000 câu, 100 đề, 200 bài học.
 
 Nhập ở **Nhập đề → Gói nhập chuẩn**. App **kiểm tra trước** (không ghi gì), báo lỗi theo từng mục; mục lỗi bị bỏ qua, mục

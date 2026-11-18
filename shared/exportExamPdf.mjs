@@ -255,25 +255,38 @@ export async function examToPdf(exam, variants, qById, opts = {}) {
   };
 
   const embeddedImageCache = new Map();
-  const drawImageToken = async (imgId) => {
-    if (!opts.imageResolver) return;
+  /** Nhúng hình (PNG/JPG). Trả null nếu không có hoặc định dạng không in được (vd WebP). */
+  const getEmbedded = async (imgId) => {
+    if (!opts.imageResolver) return null;
     let embedded = embeddedImageCache.get(imgId);
     if (embedded === undefined) {
       const im = opts.imageResolver(imgId);
-      if (!im?.data) {
-        embeddedImageCache.set(imgId, null);
-        return;
-      }
-      try {
-        embedded = im.mime?.includes('png') ? await pdfDoc.embedPng(im.data) : await pdfDoc.embedJpg(im.data);
-      } catch {
-        embedded = null;
+      embedded = null;
+      if (im?.data) {
+        try {
+          if (im.mime?.includes('png')) embedded = await pdfDoc.embedPng(im.data);
+          else if (im.mime?.includes('jpeg') || im.mime?.includes('jpg')) embedded = await pdfDoc.embedJpg(im.data);
+        } catch {
+          embedded = null;
+        }
       }
       embeddedImageCache.set(imgId, embedded);
     }
-    if (!embedded) return;
+    return embedded;
+  };
+  const MISSING_IMAGE = '[Hình không in được: hãy lưu hình dạng PNG hoặc JPG]';
+
+  const drawImageToken = async (imgId) => {
+    if (!opts.imageResolver) return;
+    const embedded = await getEmbedded(imgId);
+    if (!embedded) {
+      // Không bỏ trống im lặng: ghi rõ để giáo viên biết mà sửa trước khi in
+      drawWrapped(MISSING_IMAGE, { size: 9.5, indent: 16, color: rgb(0.7, 0.15, 0.15), spaceAfter: 4 });
+      return;
+    }
+    // Hình học/đồ thị cần đủ lớn để đọc: rộng tối đa ~12 cm, cao tối đa ~9 cm
     const maxW = Math.min(CONTENT_W - 24, 340);
-    const scale = Math.min(1, maxW / embedded.width, 190 / embedded.height);
+    const scale = Math.min(1, maxW / embedded.width, 255 / embedded.height);
     const drawW = embedded.width * scale;
     const drawH = embedded.height * scale;
     ensureSpace(drawH + 10);
@@ -284,6 +297,33 @@ export async function examToPdf(exam, variants, qById, opts = {}) {
       height: drawH,
     });
     y -= drawH + 8;
+  };
+
+  /** Phương án trắc nghiệm toàn hình: xếp 2 cột như đề in thật. labelled: [{ label, imgId, note }] */
+  const drawImageOptionGrid = async (cells) => {
+    const gap = 14;
+    const colW = (CONTENT_W - 14 - gap) / 2;
+    const maxH = 150;
+    for (let r = 0; r < cells.length; r += 2) {
+      const row = cells.slice(r, r + 2);
+      const dims = [];
+      for (const c of row) {
+        const em = await getEmbedded(c.imgId);
+        if (!em) { dims.push({ c, em: null, w: 0, h: 14 }); continue; }
+        const sc = Math.min(1, (colW - 18) / em.width, maxH / em.height);
+        dims.push({ c, em, w: em.width * sc, h: em.height * sc });
+      }
+      const rowH = Math.max(...dims.map((d) => d.h)) + 6;
+      ensureSpace(rowH + 6);
+      dims.forEach((d, i) => {
+        const x0 = MARGIN_X + 14 + i * (colW + gap);
+        page.drawText(safeText(`${d.c.label}.`, fontBold), { x: x0, y: y - 11, size: 10, font: fontBold, color: rgb(0.08, 0.1, 0.14) });
+        if (d.em) page.drawImage(d.em, { x: x0 + 16, y: y - d.h, width: d.w, height: d.h });
+        else page.drawText(safeText('[Hình không in được]', font), { x: x0 + 16, y: y - 11, size: 9, font, color: rgb(0.7, 0.15, 0.15) });
+        if (d.c.note) page.drawText(safeText(d.c.note, font), { x: x0 + 16, y: y - d.h - 10, size: 9, font, color: rgb(0.2, 0.22, 0.26) });
+      });
+      y -= rowH + (row.some((c) => c.note) ? 12 : 0) + 4;
+    }
   };
 
   const drawRichText = async (raw, optsText = {}) => {
@@ -372,7 +412,14 @@ export async function examToPdf(exam, variants, qById, opts = {}) {
         ensureSpace(30);
         await drawRichText(`Câu ${i + 1}. ${q.stem}`, { size: 10.5, spaceAfter: 3 });
 
-        if (type === 'mcq') {
+        const imageOnly = (txt) => /^\s*\[\[img:\d+\]\]\s*[^\[$]{0,30}$/.test(String(txt ?? ''));
+        if (type === 'mcq' && opts.imageResolver && (q.options ?? []).length === 4 && q.options.every(imageOnly)) {
+          const perm = it.perm ?? [0, 1, 2, 3];
+          await drawImageOptionGrid(perm.map((orig, d) => {
+            const txt = String(q.options[orig]);
+            return { label: 'ABCD'[d], imgId: Number(txt.match(/\[\[img:(\d+)\]\]/)[1]), note: latexToReadableUnicode(txt.replace(/\[\[img:\d+\]\]/, '').trim()) };
+          }));
+        } else if (type === 'mcq') {
           const perm = it.perm ?? [0, 1, 2, 3];
           for (let d = 0; d < perm.length; d++) {
             const orig = perm[d];

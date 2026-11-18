@@ -16,6 +16,7 @@ import { generateExam, imageOptions, apportion, makeVariant, makeVariants, varia
 import { diagnoseAttempt, diagnoseItem, computeMastery, recommend, selectPractice } from '../shared/diagnose.mjs';
 import { examToDocx, crossAnswerKey } from '../shared/exportExam.mjs';
 import { examToPdf } from '../shared/exportExamPdf.mjs';
+import { sniffImage } from '../shared/docx.mjs';
 import { exportAnswerSheetDocx } from '../shared/exportAnswerSheetDocx.mjs';
 import { TOPICS, TOPIC_BY_CODE, LEVELS, SOURCES, SOURCE_HINT, ERROR_TYPES, QUESTION_TYPES } from '../shared/topics.mjs';
 import { CSV_TEMPLATE, SHEET_HEADERS } from '../shared/sheet.mjs';
@@ -1118,8 +1119,9 @@ export function createApp(config = {}) {
   });
   route('POST','/api/images',STAFF,({user,raw,ip})=>{
     if(!raw?.length||raw.length>5*1024*1024)fail(400,'Hình cần nhỏ hơn 5 MB.');
-    const mime=raw.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))?'image/png':raw[0]===255&&raw[1]===216&&raw[2]===255?'image/jpeg':raw.subarray(0,4).toString()==='RIFF'&&raw.subarray(8,12).toString()==='WEBP'?'image/webp':null;
-    if(!mime)fail(400,'Chỉ nhận hình PNG, JPG hoặc WebP hợp lệ.');
+    const mime=raw.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))?'image/png':raw[0]===255&&raw[1]===216&&raw[2]===255?'image/jpeg':null;
+    // Chỉ PNG/JPG: in được ra PDF và Word bản nào cũng mở được (WebP thì không)
+    if(!mime)fail(400,'Chỉ nhận hình PNG hoặc JPG. Hình WebP/GIF/HEIC hãy lưu lại dạng PNG hoặc JPG rồi tải lên.');
     const id=saveImage(user,{data:raw,mime});audit(user,'image_upload',`#${id}`,ip);return {id};
   });
   // File đáp án rời: đọc thành bảng đáp án, rồi đối chiếu với các câu đang duyệt.
@@ -1157,7 +1159,7 @@ export function createApp(config = {}) {
     return { ids };
   });
   // ---- GÓI NHẬP CHUẨN (.json / .zip): câu hỏi + đề + bài học, xử lý bên ngoài rồi đưa vào ----
-  const IMAGE_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
+  const IMAGE_EXT = /\.(png|jpe?g|webp|gif|bmp|heic|heif|svg|tiff?)$/i;
   async function readPackage(name, raw) {
     const ext = String(name).toLowerCase().split('.').pop();
     if (!raw?.length) fail(400, 'File gói trống.');
@@ -1175,17 +1177,26 @@ export function createApp(config = {}) {
     if (!jsonFile) fail(400, 'Trong .zip cần có một file .json (nên đặt tên goi.json).');
     const base = jsonFile.name.includes('/') ? jsonFile.name.slice(0, jsonFile.name.lastIndexOf('/') + 1) : '';
     const images = {};
+    const rejected = {};
     for (const f of files) {
-      const fext = f.name.toLowerCase().split('.').pop();
-      if (!IMAGE_MIME[fext]) continue;
-      const data = await f.async('nodebuffer');
-      if (data.length > 5 * 1024 * 1024) continue;
+      if (!IMAGE_EXT.test(f.name)) continue;
       const rel = f.name.startsWith(base) ? f.name.slice(base.length) : f.name;
-      images[rel] = { data, mime: IMAGE_MIME[fext] };
       const bare = rel.split('/').pop();
+      const data = await f.async('nodebuffer');
+      // Nhận theo nội dung file, không tin đuôi: chỉ PNG/JPG để in PDF và Word được
+      const sniffed = sniffImage(data);
+      let reason = null;
+      if (data.length > 5 * 1024 * 1024) reason = 'lớn hơn 5 MB';
+      else if (sniffed !== 'image/png' && sniffed !== 'image/jpeg') reason = 'không phải PNG/JPG (hãy lưu lại dạng PNG hoặc JPG)';
+      if (reason) {
+        rejected[rel] = reason;
+        if (!rejected[bare]) rejected[bare] = reason;
+        continue;
+      }
+      images[rel] = { data, mime: sniffed };
       if (!images[bare]) images[bare] = images[rel];
     }
-    return { json: await jsonFile.async('string'), images };
+    return { json: await jsonFile.async('string'), images, rejected };
   }
   function packageSummary(p) {
     return {
@@ -1203,8 +1214,8 @@ export function createApp(config = {}) {
   }));
   route('POST', '/api/import/package', STAFF, async ({ user, raw, query, ip }) => {
     const filename = String(query.filename ?? 'goi.json');
-    const { json, images } = await readPackage(filename, raw);
-    const p = parsePackage(json, new Set(Object.keys(images)));
+    const { json, images, rejected } = await readPackage(filename, raw);
+    const p = parsePackage(json, new Set(Object.keys(images)), rejected);
     const dryRun = query.dryRun === '1' || query.dryRun === 'true';
     if (dryRun) {
       // Câu gần trùng với ngân hàng (giống ≥ 75%): báo trước để người nhập xem lại; câu trùng hệt sẽ tự bỏ qua khi nhập

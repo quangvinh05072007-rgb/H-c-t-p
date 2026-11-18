@@ -51,7 +51,7 @@ Người dùng đã yêu cầu triển khai roadmap nâng cấp: OCR công thứ
 - `server/import-jobs.mjs`: hàng đợi SQLite lưu input BLOB, result JSON, trạng thái/progress, retry/cancel; phục hồi running thành queued sau restart; một worker cục bộ. Không dùng BullMQ vì máy chưa có Redis.
 - API `/api/import/jobs`, `/api/import/jobs/:id`, `.../cancel`, `.../retry`. Chỉ uploader hoặc admin cùng trường được xem/quản lý.
 - `/api/import/save` nhận `jobId`, lưu idempotent: mở/lưu cùng tác vụ lần nữa trả IDs cũ, tránh tạo câu trùng.
-- `/api/images` nhận PNG/JPG/WebP tối đa 5 MB, kiểm chữ ký, không nhận SVG/HTML.
+- `/api/images` nhận PNG/JPG tối đa 5 MB (không nhận WebP vì không in ra PDF/Word được), kiểm chữ ký, không nhận SVG/HTML.
 - `src/ui/ImportJobsPanel.tsx`, `Import.tsx`: chọn nhiều file, tiến độ, mở lại kết quả, hủy/thử lại. Tối đa 10 file/lần, 25 MB/file, 10 tác vụ đang chờ/người.
 - `server/importers.mjs` nhận options progress/signal, `server/pdf-ocr.mjs` báo tiến độ và kiểm tra hủy mỗi trang.
 - `server/index.mjs` đã viết shutdown chờ đóng hàng đợi trước khi đóng DB; **chưa chạy thử shutdown cuối này**.

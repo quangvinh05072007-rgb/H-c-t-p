@@ -40,7 +40,7 @@ export function imageRefs(s) {
  * Đọc và kiểm tra gói. imageNames: tập tên file hình có trong ZIP (rỗng nếu chỉ có JSON).
  * Trả về { source, questions, exams, lessons, errors, warnings } — errors là lỗi chặn từng mục, mục lỗi bị bỏ qua.
  */
-export function parsePackage(raw, imageNames = new Set()) {
+export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
   const errors = [];
   const warnings = [];
   let pkg = raw;
@@ -69,8 +69,8 @@ export function parsePackage(raw, imageNames = new Set()) {
   if (errors.length) return { source, questions: [], exams: [], lessons: [], errors, warnings };
 
   const checkImages = (where, ...fields) => {
-    const missing = fields.flatMap(imageRefs).filter((n) => !imageNames.has(n));
-    return missing.length ? [`thiếu hình ${[...new Set(missing)].join(', ')} trong gói`] : [];
+    const missing = [...new Set(fields.flatMap(imageRefs).filter((n) => !imageNames.has(n)))];
+    return missing.map((n) => (rejectedImages[n] ? `hình ${n} ${rejectedImages[n]}` : `thiếu hình ${n} trong gói`));
   };
   const tooLong = (...fields) => fields.some((f) => String(f ?? '').length > PACKAGE_LIMITS.textLength);
 

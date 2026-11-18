@@ -347,3 +347,10 @@ table.t tbody tr:hover, .roster-table tbody tr:hover td { background: #f8faff; }
 .btn:active {
   transform: scale(0.98);
 }
+
+/* Hình đề bài (đồ thị, hình học) thường là nét đen trên nền trong suốt: ở chế độ tối phải đặt nền trắng, không thì mất nét. */
+[data-theme='dark'] img[src^='/api/images/'] {
+  background: #fff;
+  border-radius: 4px;
+  padding: 4px;
+}
