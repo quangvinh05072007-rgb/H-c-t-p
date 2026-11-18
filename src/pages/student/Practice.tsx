@@ -1,9 +1,8 @@
 import { matchesSearch } from '../../../shared/search.mjs';
-import { useEffect, useMemo, useState } from 'react';
-import { Clock, Grid2X2, List, Search, SlidersHorizontal } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { BookMarked, Clock, Grid2X2, List, Search, SlidersHorizontal } from 'lucide-react';
 import { get, post } from '../../api';
 import { ErrorBox, fmtScore, go, Loading, scoreColor, topicName, useApp, useAsync } from '../../ui/kit';
-import { MistakeNotebook } from './MistakeNotebook';
 
 type PracticeExam = {
   id: number;
@@ -51,12 +50,8 @@ function SubjectTag({ subject, grade }: { subject: string; grade?: number | null
   );
 }
 
-export function PracticeHub({ initialTab = 'exams' }: { initialTab?: 'exams' | 'mistakes' }) {
+export function PracticeHub() {
   const { meta, toast } = useApp();
-  const [tab, setTab] = useState<'exams' | 'mistakes'>(initialTab);
-  useEffect(() => {
-    setTab(initialTab);
-  }, [initialTab]);
 
   const { data, error, loading, reload } = useAsync(
     () => get<PracticeResponse>('/api/student/practice-exams'),
@@ -141,25 +136,6 @@ export function PracticeHub({ initialTab = 'exams' }: { initialTab?: 'exams' | '
     }
   };
 
-  const handleStartMistakeExam = async () => {
-    setCustomBusy(true);
-    try {
-      const att = await post<any>('/api/student/mistakes/practice', {
-        count: 10,
-        title: 'Đề Quét Sạch Lỗi Sai',
-      });
-      go(`/thi/${att.id}`);
-    } catch (err: any) {
-      toast(err.message || 'Chưa có câu sai nào để tạo đề.');
-      setCustomBusy(false);
-    }
-  };
-
-  const switchTab = (next: 'exams' | 'mistakes') => {
-    setTab(next);
-    go(next === 'mistakes' ? '/so-tay-loi-sai' : '/luyen-tap');
-  };
-
   const resetFilters = () => {
     setSelectedSubject('all');
     setSelectedGrade('all');
@@ -225,30 +201,15 @@ export function PracticeHub({ initialTab = 'exams' }: { initialTab?: 'exams' | '
       <header className="su-head">
         <div>
           <h1>Đề thi</h1>
-          <p className="su-sub">
-            {tab === 'mistakes' ? 'Câu đã làm sai, ghi chú và đề ôn lại' : `${totalCount} đề · ${completedCount} đã làm`}
-          </p>
+          <p className="su-sub">{`${totalCount} đề · ${completedCount} đã làm`}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="seg" role="tablist">
-            <button type="button" role="tab" aria-selected={tab === 'exams'} className={tab === 'exams' ? 'on' : ''} onClick={() => switchTab('exams')}>
-              Kho đề
-            </button>
-            <button type="button" role="tab" aria-selected={tab === 'mistakes'} className={tab === 'mistakes' ? 'on' : ''} onClick={() => switchTab('mistakes')}>
-              Sổ tay lỗi sai{dueCount > 0 ? ` (${dueCount})` : ''}
-            </button>
-          </div>
-          {tab === 'mistakes' && (
-            <button type="button" className="btn sm primary" disabled={customBusy} onClick={handleStartMistakeExam}>
-              Tạo đề 10 câu sai
-            </button>
-          )}
-        </div>
+        <button type="button" className="btn" onClick={() => go('/so-tay-loi-sai')}>
+          <BookMarked size={15} aria-hidden="true" />
+          Sổ tay lỗi sai{dueCount > 0 ? ` (${dueCount} cần ôn)` : ''}
+        </button>
       </header>
 
-      {tab === 'mistakes' ? (
-        <MistakeNotebook embedded />
-      ) : loading ? (
+      {loading ? (
         <Loading text="Đang mở kho đề…" />
       ) : error ? (
         <ErrorBox error={error} onRetry={reload} />

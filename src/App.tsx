@@ -43,6 +43,7 @@ import { ExamRoom } from './pages/student/ExamRoom';
 import { ResultPage } from './pages/student/Result';
 import { AnswerReviewRoom } from './pages/student/AnswerReviewRoom';
 import { PracticeHub } from './pages/student/Practice';
+import { MistakeNotebook } from './pages/student/MistakeNotebook';
 import { EndlessPracticeStream } from './pages/student/EndlessPracticeStream';
 import { AdminHome, Audit, Users } from './pages/admin/Admin';
 import { PeriodicReports } from './pages/teacher/PeriodicReports';
@@ -250,9 +251,9 @@ export function App() {
     user.role === 'student'
       ? [
           ['/', () => <StudentHome />],
-          ['/so-tay-loi-sai', () => <PracticeHub initialTab="mistakes" />],
-          ['/loi-sai', () => <PracticeHub initialTab="mistakes" />],
-          ['/ghi-chu', () => <PracticeHub initialTab="mistakes" />],
+          ['/so-tay-loi-sai', () => <MistakeNotebook />],
+          ['/loi-sai', () => <MistakeNotebook />],
+          ['/ghi-chu', () => <MistakeNotebook />],
           ['/luyen-vo-han', () => <EndlessPracticeStream />],
           ['/nhiem-vu', () => <EndlessPracticeStream />],
           ['/ban-do-tri-thuc', () => <SelfStudy />],
@@ -439,7 +440,7 @@ export function App() {
       return [
         { title: 'Tổng quan bàn học', desc: 'Nhiệm vụ & bài tập cần làm', path: '/', icon: Home },
         { title: 'Kho đề thi', desc: 'Bộ đề khảo sát THPT & ôn tập', path: '/luyen-tap', icon: ClipboardList },
-        { title: 'Sổ tay lỗi sai', desc: 'Trong Đề thi · Xem lại các câu làm sai & ghi chú', path: '/so-tay-loi-sai', icon: BookmarkCheck },
+        { title: 'Sổ tay lỗi sai', desc: 'Xem lại câu làm sai, ghi chú và ôn lại', path: '/so-tay-loi-sai', icon: BookmarkCheck },
         { title: 'Tự học kiến thức', desc: 'Chuyên đề, công thức & bài tập', path: '/tu-hoc', icon: BookOpen },
         { title: 'Lớp học của tôi', desc: 'Học phần, bài kiểm tra & điểm số', path: '/lop-hoc', icon: GraduationCap },
         { title: 'Tài khoản cá nhân', desc: 'Thông tin cá nhân & giao diện', path: '/tai-khoan', icon: UserIcon },
