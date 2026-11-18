@@ -459,6 +459,14 @@ export function Report({ id, classId }: { id: number; classId?: number }) {
                 <span className="small tabular-nums" title="Độ phân biệt: nhóm 27% điểm cao trừ nhóm 27% điểm thấp. Trên 0,3 là tốt.">
                   Phân biệt <b>{it.disc === null ? '—' : it.disc.toFixed(2)}</b>
                 </span>
+                {it.medianSec ? (
+                  <span className="small tabular-nums" title="Thời gian làm câu này: trung vị của cả lớp">
+                    Thời gian <b>{it.medianSec >= 60 ? `${Math.floor(it.medianSec / 60)}′${String(Math.round(it.medianSec % 60)).padStart(2, '0')}″` : `${Math.round(it.medianSec)}″`}</b>
+                  </span>
+                ) : null}
+                {it.flaggedBy > 0 && (
+                  <span className="su-chip is-warn" title="Số em đánh dấu câu này là còn phân vân khi làm bài">{it.flaggedBy} em phân vân</span>
+                )}
               </div>
               <MathText as="div" className="small" text={it.stem} />
               {it.choices && (

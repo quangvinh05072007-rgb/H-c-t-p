@@ -1899,25 +1899,9 @@ export function createApp(config = {}) {
     if (!teacherClassIds(user).includes(cid)) fail(404, 'Không tìm thấy lớp.');
     return { groups: classWeakGroups(cid) };
   });
-  route('POST', '/api/classes/:id/practice-assignment', STAFF, ({ user, params, body, ip }) => {
-    const cid = Number(params.id);
-    const target = `class:${cid}`;
-    const cls = db.get('SELECT * FROM classes WHERE id = ?', cid);
-    if (!cls) fail(404, 'Không tìm thấy lớp.');
-    if (cls.school_id !== user.school_id) deny(user, 'practice_assign', target, 'Lớp không thuộc trường của bạn.', ip);
-    if (!teacherClassIds(user).includes(cid)) deny(user, 'practice_assign', target, 'Bạn không phụ trách lớp này.', ip);
-    const topic = String(body.topic ?? '');
-    if (!TOPIC_BY_CODE[topic]) fail(400, 'Chọn chuyên đề.');
-    const classStudents = db.all("SELECT id FROM users WHERE class_id = ? AND role = 'student' AND active = 1", cid).map((r) => r.id);
-    let ids;
-    if (Array.isArray(body.studentIds) && body.studentIds.length) {
-      ids = [...new Set(body.studentIds.map(Number))];
-      if (ids.some((id) => !classStudents.includes(id))) fail(400, 'Có học sinh không thuộc lớp này.');
-    } else {
-      ids = (classWeakGroups(cid).find((g) => g.topic === topic)?.students ?? []).map((s) => s.id);
-    }
-    if (!ids.length) fail(400, 'Chưa có học sinh nào yếu chuyên đề này (cần ít nhất 3 câu đã làm). Chọn học sinh thủ công.');
-    const count = Math.min(30, Math.max(3, Math.floor(Number(body.count) || 10)));
+  /** Tạo phiếu luyện một chuyên đề cho một nhóm học sinh trong lớp (bài tập nhắm đúng các em). */
+  function assignTopicPractice(user, cid, topic, ids, opts, ip) {
+    const count = Math.min(30, Math.max(3, Math.floor(Number(opts.count) || 10)));
     const pool = db.all("SELECT id, type, topic, level, status FROM questions WHERE school_id = ? AND status = 'approved' AND topic = ?", user.school_id, topic);
     if (!pool.length) fail(400, 'Ngân hàng chưa có câu đã duyệt cho chuyên đề này.');
     const avail = { mcq: 0, tf: 0, short: 0 };
@@ -1926,13 +1910,13 @@ export function createApp(config = {}) {
     const counts = Object.fromEntries(Object.keys(avail).map((t) => [t, Math.min(avail[t], want[t] ?? 0)]));
     // Ưu tiên câu các em này chưa làm
     const done = db.all(`SELECT DISTINCT qid FROM evidence WHERE student_id IN (${ids.map(() => '?').join(',')})`, ...ids).map((r) => r.qid);
-    const res = generateExam(pool, { counts, levels: { 1: 40, 2: 40, 3: 20 }, topics: [topic], avoidIds: done, seed: `${user.id}-${now()}` });
+    const res = generateExam(pool, { counts, levels: opts.levels ?? { 1: 40, 2: 40, 3: 20 }, topics: [topic], avoidIds: done, seed: `${user.id}-${now()}` });
     if (!res.items.length) fail(400, 'Không chọn được câu nào cho phiếu luyện.');
     const qmap = questionsMap(user.school_id, res.items.map((x) => x.qid));
     const items = res.items.map((x) => ({ qid: x.qid, type: x.type, topic: x.topic, level: x.level, group: qmap[x.qid].group_id ?? null, fixedOptions: imageOptions(qmap[x.qid]) }));
-    const title = String(body.title ?? '').trim() || `Phiếu luyện: ${TOPIC_BY_CODE[topic].name}`;
+    const title = String(opts.title ?? '').trim() || `Phiếu luyện: ${TOPIC_BY_CODE[topic].name}`;
     const variants = makeVariants(items, 1, `${user.id}-${now()}`);
-    const closeAt = now() + Math.min(30, Math.max(1, Number(body.days) || 7)) * 86400000;
+    const closeAt = now() + Math.min(30, Math.max(1, Number(opts.days) || 7)) * 86400000;
     const out = db.tx(() => {
       const examId = Number(
         db
@@ -1964,6 +1948,65 @@ export function createApp(config = {}) {
     });
     audit(user, 'practice_assign', `${ids.length} học sinh, ${items.length} câu, ${TOPIC_BY_CODE[topic].name}`, ip, { target: `assignment:${out.assignmentId}`, new: { topic, students: ids, items: items.length } });
     return { ...out, students: ids.length, items: items.length, warnings: res.warnings, shortages: res.shortages };
+  }
+
+  route('POST', '/api/classes/:id/practice-assignment', STAFF, ({ user, params, body, ip }) => {
+    const cid = Number(params.id);
+    const target = `class:${cid}`;
+    const cls = db.get('SELECT * FROM classes WHERE id = ?', cid);
+    if (!cls) fail(404, 'Không tìm thấy lớp.');
+    if (cls.school_id !== user.school_id) deny(user, 'practice_assign', target, 'Lớp không thuộc trường của bạn.', ip);
+    if (!teacherClassIds(user).includes(cid)) deny(user, 'practice_assign', target, 'Bạn không phụ trách lớp này.', ip);
+    const topic = String(body.topic ?? '');
+    if (!TOPIC_BY_CODE[topic]) fail(400, 'Chọn chuyên đề.');
+    const classStudents = db.all("SELECT id FROM users WHERE class_id = ? AND role = 'student' AND active = 1", cid).map((r) => r.id);
+    let ids;
+    if (Array.isArray(body.studentIds) && body.studentIds.length) {
+      ids = [...new Set(body.studentIds.map(Number))];
+      if (ids.some((id) => !classStudents.includes(id))) fail(400, 'Có học sinh không thuộc lớp này.');
+    } else {
+      ids = (classWeakGroups(cid).find((g) => g.topic === topic)?.students ?? []).map((s) => s.id);
+    }
+    if (!ids.length) fail(400, 'Chưa có học sinh nào yếu chuyên đề này (cần ít nhất 3 câu đã làm). Chọn học sinh thủ công.');
+    return assignTopicPractice(user, cid, topic, ids, { count: body.count, title: body.title, days: body.days }, ip);
+  });
+
+  // Giao bài phân hóa: chia lớp theo mức thành thạo chuyên đề, mỗi nhóm một phiếu vừa sức
+  route('POST', '/api/classes/:id/differentiated', STAFF, ({ user, params, body, ip }) => {
+    const cid = Number(params.id);
+    const cls = db.get('SELECT * FROM classes WHERE id = ?', cid);
+    if (!cls) fail(404, 'Không tìm thấy lớp.');
+    if (cls.school_id !== user.school_id || !teacherClassIds(user).includes(cid)) deny(user, 'practice_assign', `class:${cid}`, 'Bạn không phụ trách lớp này.', ip);
+    const topic = String(body.topic ?? '');
+    if (!TOPIC_BY_CODE[topic]) fail(400, 'Chọn chuyên đề.');
+    const students = db.all("SELECT id FROM users WHERE class_id = ? AND role = 'student' AND active = 1", cid).map((r) => r.id);
+    if (!students.length) fail(400, 'Lớp chưa có học sinh.');
+    const groups = { weak: [], mid: [], strong: [] };
+    for (const sid of students) {
+      const m = studentMastery(sid)[topic];
+      const v = m && m.n >= 3 ? m.value : null;
+      (v === null ? groups.mid : v < 0.5 ? groups.weak : v < 0.75 ? groups.mid : groups.strong).push(sid);
+    }
+    const plan = [
+      ['weak', 'Cần hỗ trợ', { 1: 60, 2: 40, 3: 0 }],
+      ['mid', 'Đang học', { 1: 30, 2: 50, 3: 20 }],
+      ['strong', 'Khá giỏi', { 1: 0, 2: 40, 3: 60 }],
+    ];
+    const name = TOPIC_BY_CODE[topic].name;
+    const created = [];
+    const skipped = [];
+    for (const [key, label, levels] of plan) {
+      const ids = groups[key];
+      if (!ids.length) continue;
+      try {
+        const r = assignTopicPractice(user, cid, topic, ids, { count: body.count ?? 8, days: body.days, levels, title: `Phiếu luyện ${name} · nhóm ${label}` }, ip);
+        created.push({ group: key, label, students: ids.length, assignmentId: r.assignmentId, items: r.items });
+      } catch (e) {
+        skipped.push({ group: key, label, students: ids.length, reason: e.message });
+      }
+    }
+    if (!created.length) fail(400, skipped[0]?.reason ?? 'Không tạo được phiếu nào.');
+    return { topic, created, skipped };
   });
 
   route('GET', '/api/classes/:id', STAFF, ({ user, params }) => {
@@ -2355,6 +2398,9 @@ export function createApp(config = {}) {
           else choices[4]++;
         }
       }
+      const secs = done.map((t) => Number(t.times?.[it.qid] ?? 0)).filter((x) => x > 0).sort((x, y) => x - y);
+      const medianSec = secs.length ? secs[Math.floor(secs.length / 2)] : null;
+      const flaggedBy = done.filter((t) => Array.isArray(t.flagged) && t.flagged.includes(it.qid)).length;
       const flags = [];
       if (p !== null && done.length >= 5 && p < 0.2) flags.push('Quá khó hoặc sai đáp án — kiểm tra lại');
       if (p !== null && done.length >= 5 && p > 0.95) flags.push('Quá dễ');
@@ -2367,8 +2413,12 @@ export function createApp(config = {}) {
         const dead = choices.slice(0, 4).map((n, i) => ({ n, i })).filter((x) => x.i !== q.answer && x.n === 0);
         if (dead.length) flags.push(`Phương án nhiễu ${dead.map((x) => 'ABCD'[x.i]).join(', ')} (gốc) không ai chọn — nên thay bằng lỗi sai phổ biến hơn`);
       }
-      return { qid: it.qid, type: q.type, topic: q.topic, level: q.level, stem: q.stem, options: q.options, answer: q.answer, p, disc, choices, flags };
+      if (done.length >= 5 && flaggedBy / done.length >= 0.3) flags.push(`${flaggedBy}/${done.length} em đánh dấu còn phân vân — nên chữa kỹ trên lớp`);
+      return { qid: it.qid, type: q.type, topic: q.topic, level: q.level, stem: q.stem, options: q.options, answer: q.answer, p, disc, choices, flags, medianSec, flaggedBy };
     });
+    const meds = items.map((x) => x.medianSec).filter((x) => x !== null).sort((x, y) => x - y);
+    const examMedian = meds.length ? meds[Math.floor(meds.length / 2)] : null;
+    if (examMedian && done.length >= 5) for (const x of items) if (x.medianSec !== null && x.medianSec >= Math.max(90, examMedian * 2.5)) x.flags.push(`Cả lớp làm lâu (trung vị ${Math.round(x.medianSec)} giây, gấp ${Math.round((x.medianSec / examMedian) * 10) / 10} lần câu khác)`);
     const errorCount = { concept: 0, formula: 0, transform: 0, careless: 0 };
     for (const t of done) for (const [kk, v] of Object.entries(t.diagnosis?.errorCount ?? {})) errorCount[kk] = (errorCount[kk] ?? 0) + v;
     const topicAgg = {};
@@ -3270,6 +3320,7 @@ export function createApp(config = {}) {
     const inAttempt = new Set((att.layout ?? []).map((it) => Number(it.qid)));
     const qids = [...new Set(flagged.map(Number))].filter((q) => Number.isInteger(q) && inAttempt.has(q)).slice(0, 60);
     const t = now();
+    db.run('UPDATE attempts SET flagged_json = ? WHERE id = ?', JSON.stringify(qids), att.id);
     for (const qid of qids) {
       db.run(
         `INSERT INTO student_notes (student_id, qid, school_id, note, tag, updated_at)
@@ -3906,6 +3957,21 @@ export function createApp(config = {}) {
     return { target, forecast, gainTopics, plan, week, dailyGoal };
   }
   route('GET', '/api/student/goal', ['student'], ({ user }) => goalPlan(user));
+
+  // Mục tiêu điểm & dự báo của học sinh trong lớp (giáo viên xem em nào đang xa mục tiêu)
+  route('GET', '/api/classes/:id/goals', STAFF, ({ user, params }) => {
+    const cid = Number(params.id);
+    if (!teacherClassIds(user).includes(cid)) fail(403, 'Bạn không phụ trách lớp này.');
+    const students = db.all("SELECT id, display_name, target_score FROM users WHERE class_id = ? AND role = 'student' AND active = 1 ORDER BY display_name", cid);
+    const rows = students.map((s) => {
+      const g = goalPlan({ id: s.id, school_id: user.school_id });
+      const gap = g.target !== null && g.forecast ? Math.round((g.target - g.forecast.score) * 4) / 4 : null;
+      return { id: s.id, name: s.display_name, target: g.target, forecast: g.forecast, gap, weakest: g.gainTopics[0]?.name ?? null };
+    });
+    rows.sort((x, y) => (y.gap ?? -99) - (x.gap ?? -99));
+    return { students: rows, withTarget: rows.filter((r) => r.target !== null).length };
+  });
+
   route('PUT', '/api/student/goal', ['student'], ({ user, body }) => {
     const v = body?.target === null ? null : Number(body?.target);
     if (v !== null && !(Number.isFinite(v) && v >= 1 && v <= 10)) fail(400, 'Mục tiêu điểm phải từ 1 đến 10.');

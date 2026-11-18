@@ -173,6 +173,7 @@ const ADDED_COLUMNS = [
   ['assignments', 'module_id', 'INTEGER'],
   ['users', 'target_score', 'REAL'],
   ['attempts', 'mode', 'TEXT'],
+  ['attempts', 'flagged_json', 'TEXT'],
 ];
 
 export function migrate(db) {

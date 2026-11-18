@@ -97,6 +97,18 @@ export function ClassWorkspace({
   const weakGroups = weakData?.weakGroups ?? [];
   const reviewSummary = reviewData?.classes?.[0] ?? null;
   const [showAllOverdue, setShowAllOverdue] = useState(false);
+  const [showAllGoals, setShowAllGoals] = useState(false);
+  const { data: goalData } = useAsync(() => get<{ students: any[]; withTarget: number }>(`/api/classes/${id}/goals`).catch(() => ({ students: [], withTarget: 0 })), [id]);
+  const assignDifferentiated = async (topic: string) => {
+    if (!confirm('Chia lớp theo mức thành thạo chuyên đề này và giao mỗi nhóm một phiếu luyện vừa sức (hạn 7 ngày)?')) return;
+    try {
+      const r = await post<any>(`/api/classes/${id}/differentiated`, { topic, count: 8 });
+      toast(`Đã giao ${r.created.length} phiếu: ${r.created.map((c: any) => `${c.label} (${c.students} em)`).join(', ')}${r.skipped.length ? `. Bỏ qua ${r.skipped.map((c: any) => c.label).join(', ')}: không đủ câu.` : '.'}`);
+      reload();
+    } catch (e: any) {
+      toast(e.message || 'Không giao được bài phân hóa.');
+    }
+  };
   const overdueStudents = useMemo(
     () =>
       (reviewSummary?.students ?? [])
@@ -307,9 +319,55 @@ export function ClassWorkspace({
                         >
                           Giao phiếu luyện nhóm yếu
                         </button>
+                        <button
+                          type="button"
+                          className="cls-btn cls-btn-sm cls-btn-primary"
+                          disabled={busyAction}
+                          onClick={() => assignDifferentiated(wg.topic)}
+                          title="Chia lớp thành 3 nhóm theo mức thành thạo, mỗi nhóm một phiếu khó dễ khác nhau"
+                        >
+                          Giao phân hóa 3 mức
+                        </button>
                       </div>
                     </div>
                   ))}
+                </div>
+              </section>
+            )}
+
+            {/* Mục tiêu điểm của học sinh */}
+            {goalData && goalData.students.length > 0 && (
+              <section className="cls-surface-card" aria-label="Mục tiêu điểm của học sinh">
+                <div className="cls-card-head">
+                  <h2>Mục tiêu điểm</h2>
+                  <span className="cls-muted-text">{goalData.withTarget}/{goalData.students.length} em đã đặt mục tiêu</span>
+                </div>
+                <div className="cls-todo-list">
+                  {goalData.students.slice(0, showAllGoals ? goalData.students.length : 5).map((g: any) => (
+                    <div key={g.id} className="cls-todo-row">
+                      <div className="cls-todo-left">
+                        <div className="cls-todo-title"><a href={`#/hoc-sinh/${g.id}`}>{g.name}</a></div>
+                        <div className="cls-todo-meta tabular-nums">
+                          <span>Mục tiêu {g.target !== null ? fmtScore(g.target) : '—'}</span>
+                          <span aria-hidden="true">·</span>
+                          <span>Dự báo {g.forecast ? `${fmtScore(g.forecast.score)} (${fmtScore(g.forecast.low)}–${fmtScore(g.forecast.high)})` : 'chưa đủ bài'}</span>
+                          {g.weakest && (<><span aria-hidden="true">·</span><span>Gỡ điểm: {g.weakest}</span></>)}
+                        </div>
+                      </div>
+                      <div className="cls-todo-right">
+                        {g.gap !== null && (
+                          <span className={`su-chip ${g.gap >= 1.5 ? 'is-bad' : g.gap > 0 ? 'is-warn' : 'is-good'}`}>
+                            {g.gap > 0 ? `Thiếu ${fmtScore(g.gap)}` : 'Đạt mục tiêu'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {goalData.students.length > 5 && (
+                    <button type="button" className="cls-text-link" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => setShowAllGoals((v) => !v)}>
+                      {showAllGoals ? 'Thu gọn' : `Xem cả lớp (${goalData.students.length})`}
+                    </button>
+                  )}
                 </div>
               </section>
             )}
