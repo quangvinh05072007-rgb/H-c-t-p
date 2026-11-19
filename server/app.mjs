@@ -215,6 +215,20 @@ export function createApp(config = {}) {
     return { classes, avgScore: s.avg === null ? null : Math.round(s.avg * 100) / 100, submissions: s.n };
   }
 
+  /** Lưu file đề gốc (không lưu trùng: cùng nội dung trong trường thì dùng lại). */
+  function saveDocument(user, doc) {
+    const sha = crypto.createHash('sha256').update(doc.data).digest('hex');
+    const found = db.get('SELECT id FROM documents WHERE school_id = ? AND sha = ?', user.school_id, sha);
+    if (found) return found.id;
+    return Number(db.run('INSERT INTO documents (school_id, sha, name, mime, size, data, uploaded_by, created_at) VALUES (?,?,?,?,?,?,?,?)',
+      user.school_id, sha, doc.name, doc.mime, doc.data.length, doc.data, user.id, now()).lastInsertRowid);
+  }
+  function documentInfo(id) {
+    if (!id) return null;
+    const d = db.get('SELECT id, name, size, mime, created_at FROM documents WHERE id = ?', id);
+    return d ? { id: d.id, name: d.name, size: d.size, mime: d.mime, createdAt: d.created_at } : null;
+  }
+
   function questionUsed(schoolId, qid) {
     if (db.get('SELECT 1 x FROM evidence WHERE school_id = ? AND qid = ? LIMIT 1', schoolId, qid)) return true;
     return db.all('SELECT items_json FROM exams WHERE school_id = ?', schoolId).some((e) => e.items.some((x) => x.qid === qid));
@@ -841,8 +855,15 @@ export function createApp(config = {}) {
     const usage = db.all('SELECT qid, COUNT(*) n, AVG(score) p FROM evidence WHERE school_id = ? GROUP BY qid', user.school_id);
     const um = Object.fromEntries(usage.map((u) => [u.qid, u]));
     const counts = db.all("SELECT status, COUNT(*) n FROM questions WHERE school_id = ? AND status != 'archived' GROUP BY status", user.school_id);
+    // Câu đang nằm trong bao nhiêu đề (bản mới nhất của mỗi đề)
+    const usedIn = rows.length
+      ? Object.fromEntries(db.all(
+          `SELECT i.qid, COUNT(DISTINCT i.exam_id) n FROM exam_items i JOIN exams e ON e.id = i.exam_id WHERE e.superseded_by IS NULL AND i.qid IN (${rows.map(() => '?').join(',')}) GROUP BY i.qid`,
+          ...rows.map((q) => q.id),
+        ).map((r) => [r.qid, r.n]))
+      : {};
     return {
-      questions: rows.map((q) => ({ ...q, stats: um[q.id] ? { n: um[q.id].n, p: Math.round(um[q.id].p * 100) / 100 } : null, problems: validateQuestion(q) })),
+      questions: rows.map((q) => ({ ...q, usedIn: usedIn[q.id] ?? 0, stats: um[q.id] ? { n: um[q.id].n, p: Math.round(um[q.id].p * 100) / 100 } : null, problems: validateQuestion(q) })),
       counts: Object.fromEntries(counts.map((c) => [c.status, c.n])),
       total,
       hasMore: offset + rows.length < total,
@@ -1246,7 +1267,7 @@ export function createApp(config = {}) {
     const ext = String(name).toLowerCase().split('.').pop();
     if (!raw?.length) fail(400, 'File gói trống.');
     if (raw.length > 50 * 1024 * 1024) fail(400, 'Gói tối đa 50 MB.');
-    if (ext === 'json') return { json: raw.toString('utf8'), images: {}, rejected: {}, docx: null };
+    if (ext === 'json') return { json: raw.toString('utf8'), images: {}, rejected: {}, docx: null, original: null };
     if (ext !== 'zip') fail(400, 'Gói nhập phải là file .json hoặc .zip.');
     let zip;
     try {
@@ -1278,6 +1299,15 @@ export function createApp(config = {}) {
       images[rel] = { data, mime: sniffed };
       if (!images[bare]) images[bare] = images[rel];
     }
+    // File đề gốc để lưu trữ và đối chiếu: đặt trong thư mục goc/ (hoặc _goc/), Word hoặc PDF
+    let original = null;
+    const origFile = files.find((f) => /(^|\/)_?goc\/[^/]+\.(docx|pdf)$/i.test(f.name)) ?? files.find((f) => /\.docx$/i.test(f.name));
+    if (origFile) {
+      const data = await origFile.async('nodebuffer');
+      if (data.length > 30 * 1024 * 1024) fail(400, 'File đề gốc tối đa 30 MB.');
+      const isPdf = /\.pdf$/i.test(origFile.name);
+      original = { name: origFile.name.split('/').pop().slice(0, 150), data, mime: isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+    }
     // File Word gốc đi kèm (nếu có): hình thật nằm sẵn trong đó
     let docx = null;
     const docxFile = files.find((f) => /\.docx$/i.test(f.name));
@@ -1288,7 +1318,7 @@ export function createApp(config = {}) {
         fail(400, 'File Word gốc đi kèm không đọc được. Hãy mở bằng Word và lưu lại dạng .docx.');
       }
     }
-    return { json: await jsonFile.async('string'), images, rejected, docx };
+    return { json: await jsonFile.async('string'), images, rejected, docx, original };
   }
   function packageSummary(p) {
     return {
@@ -1316,7 +1346,7 @@ export function createApp(config = {}) {
   }));
   route('POST', '/api/import/package', STAFF, async ({ user, raw, query, ip }) => {
     const filename = String(query.filename ?? 'goi.json');
-    const { json, images, rejected, docx } = await readPackage(filename, raw);
+    const { json, images, rejected, docx, original } = await readPackage(filename, raw);
     const notes = [];
     if (docx) {
       let rawQs = [];
@@ -1373,7 +1403,7 @@ export function createApp(config = {}) {
         key: q.key, type: q.type, stem: q.stem, options: q.options, answer: q.answer, explanation: q.explanation,
         topic: q.topic, topicName: TOPIC_BY_CODE[q.topic]?.name ?? q.topic, level: q.level, form: q.form, needsReview: q.needsReview,
       }));
-      return { dryRun: true, ...packageSummary(p), duplicates, preview, imageData, missingImages };
+      return { dryRun: true, ...packageSummary(p), duplicates, preview, imageData, missingImages, original: original ? { name: original.name, size: original.data.length } : null };
     }
     if (!p.questions.length && !p.lessons.length) fail(400, p.errors[0]?.message ?? 'Gói không có mục hợp lệ để nhập.');
 
@@ -1384,6 +1414,7 @@ export function createApp(config = {}) {
     if (wantApprove && !canApprove) warnings.push('Trường đang dùng chính sách hai người duyệt: câu được lưu ở dạng nháp chờ duyệt.');
 
     const result = db.tx(() => {
+      const documentId = original ? saveDocument(user, original) : null;
       // Hình: chỉ lưu hình được nhắc tới
       const used = new Set();
       const collect = (s) => { for (const m of String(s ?? '').matchAll(/\[\[image:([^\]\n]+)\]\]/g)) used.add(m[1].trim()); };
@@ -1418,6 +1449,7 @@ export function createApp(config = {}) {
         }, 'imported', status, { origin });
         idByKey[q.key] = id;
         if (q.sourceNo) db.run('UPDATE questions SET source_no = ? WHERE id = ?', q.sourceNo, id);
+        if (documentId) db.run('UPDATE questions SET document_id = ? WHERE id = ?', documentId, id);
         if (status === 'approved') approved++; else drafts++;
       }
 
@@ -1441,6 +1473,7 @@ export function createApp(config = {}) {
         );
         if (user.role === 'admin' && e.shareWithSchool) db.run('UPDATE exams SET official = 1 WHERE id = ?', r.lastInsertRowid);
         writeExamMeta(Number(r.lastInsertRowid), e.meta ?? {});
+        if (documentId) db.run('UPDATE exams SET document_id = ? WHERE id = ?', documentId, r.lastInsertRowid);
         exams.push({ id: Number(r.lastInsertRowid), title: e.title });
       }
 
@@ -1792,6 +1825,41 @@ export function createApp(config = {}) {
     return { ok: true, meta: examMetaView(row), category: examCategory(row.category, row.title, row.duration_min), title: row.title };
   });
 
+  route('GET', '/api/documents/:id', STAFF, ({ user, params }) => {
+    const d = db.get('SELECT * FROM documents WHERE id = ? AND school_id = ?', params.id, user.school_id);
+    if (!d) fail(404, 'Không tìm thấy file đề gốc.');
+    return { __file: { name: d.name, type: d.mime, data: Buffer.from(d.data) } };
+  });
+
+  /** Câu này nằm trong những đề nào (bản mới nhất của mỗi đề), và đề đó đang dùng nội dung cũ hay mới của câu. */
+  route('GET', '/api/questions/:id/usage', STAFF, ({ user, params }) => {
+    const q = db.get('SELECT * FROM questions WHERE id = ? AND school_id = ?', params.id, user.school_id);
+    if (!q || !canSeeQuestion(user, q)) fail(404, 'Không tìm thấy câu hỏi.');
+    const cur = toQuestion(q);
+    const sameContent = (body) => {
+      try {
+        const b = JSON.parse(body);
+        return ['stem', 'options', 'answer', 'explanation'].every((k) => JSON.stringify(b[k] ?? null) === JSON.stringify(cur[k] ?? null));
+      } catch {
+        return false;
+      }
+    };
+    const rows = db.all(
+      `SELECT e.id, e.title, e.version, e.created_by, e.visibility, e.official, i.pos, i.part, c.body
+       FROM exam_items i JOIN exams e ON e.id = i.exam_id LEFT JOIN question_contents c ON c.id = i.content_id
+       WHERE i.qid = ? AND e.school_id = ? AND e.superseded_by IS NULL AND (e.visibility = 'school' OR e.created_by = ? OR ? = 'admin')
+       ORDER BY e.created_at DESC`,
+      q.id, user.school_id, user.id, user.role,
+    );
+    return {
+      exams: rows.map((r) => ({
+        id: r.id, title: r.title, version: r.version ?? 1, official: Boolean(r.official), position: r.pos + 1, part: r.part,
+        outdated: r.body ? !sameContent(r.body) : false,
+        assigned: db.get('SELECT COUNT(*) n FROM assignments WHERE exam_id = ?', r.id).n,
+      })),
+    };
+  });
+
   // Thư mục riêng của giáo viên
   route('GET', '/api/exam-folders', STAFF, ({ user }) => ({
     folders: db.all(
@@ -2000,7 +2068,7 @@ export function createApp(config = {}) {
     return { exam: { id: e.id, title: e.title, durationMin: e.duration_min, items: e.items, variants: e.variants.map((v) => v.code), blueprint: e.blueprint,
       mine: e.created_by === user.id, visibility: e.visibility, dept: e.dept, category: examCategory(e.category, e.title, e.duration_min), categorySet: Boolean(cleanCategory(e.category)),
       version: e.version ?? 1, official: Boolean(e.official), locked: examLocked(e), lockReason: lockReason(e), supersededBy: e.superseded_by ?? null,
-      meta: examMetaView(e), stats: examStats(e), canEditMeta: e.created_by === user.id || user.role === 'admin',
+      meta: examMetaView(e), stats: examStats(e), canEditMeta: e.created_by === user.id || user.role === 'admin', document: documentInfo(e.document_id),
       versions: db.all('SELECT id, version, created_at, superseded_by FROM exams WHERE school_id = ? AND (id = ? OR root_id = ?) ORDER BY version', e.school_id, e.root_id ?? e.id, e.root_id ?? e.id)
         .map((v) => ({ id: v.id, version: v.version ?? 1, createdAt: v.created_at, current: !v.superseded_by, assigned: db.get('SELECT COUNT(*) n FROM assignments WHERE exam_id = ?', v.id).n })),
       author: db.get('SELECT display_name FROM users WHERE id = ?', e.created_by)?.display_name,

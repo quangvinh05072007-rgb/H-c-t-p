@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { get, post } from '../../api';
 import { MathText } from '../../ui/MathText';
-import { go, Icon, Loading, topicName, useApp } from '../../ui/kit';
+import { go, Icon, Loading, Modal, topicName, useApp, useAsync } from '../../ui/kit';
 import { saveBuilderHandoff } from '../../utils/examHandoff';
 
 interface QuestionItem {
@@ -52,6 +52,7 @@ export function InfiniteQuestionBank({
   const isOwner = user?.role === 'admin';
   // Kho: '' tất cả · 'common' kho chung · 'mine' kho riêng của tôi · 'proposed' câu giáo viên đề xuất (chủ web)
   const [scope, setScope] = useState<string>('');
+  const [usageOf, setUsageOf] = useState<number | null>(null);
 
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
@@ -480,6 +481,7 @@ export function InfiniteQuestionBank({
         )}
       </div>
 
+      {usageOf !== null && <QuestionUsageModal qid={usageOf} onClose={() => setUsageOf(null)} />}
       {/* Questions Stream */}
       <div className="su-card su-bank-list">
         {questions.map((q) => {
@@ -508,6 +510,11 @@ export function InfiniteQuestionBank({
                   <span>· {LEVEL_LABEL[q.level] || `Mức ${q.level}`}</span>
                   <span>· {topicName(meta, q.topic)}</span>
                   {(q as any).form && <span className="su-chip">{(q as any).form}</span>}
+                  {(q as any).usedIn > 0 && (
+                    <button type="button" className="su-chip" style={{ cursor: 'pointer', border: 0 }} onClick={(ev) => { ev.stopPropagation(); setUsageOf(q.id); }} title="Xem câu này nằm trong những đề nào">
+                      Trong {(q as any).usedIn} đề
+                    </button>
+                  )}
                   {(q as any).scope === 'common' && <span className="su-chip is-good">Kho chung</span>}
                   {(q as any).scope === 'private' && <span className="su-chip">Kho riêng</span>}
                   {(q as any).proposedAt && <span className="su-chip is-warn">Đã đề xuất</span>}
@@ -619,5 +626,35 @@ export function InfiniteQuestionBank({
         </div>
       )}
     </div>
+  );
+}
+
+
+/** Câu này đang nằm trong những đề nào; đề nào còn dùng nội dung cũ của câu (câu đã sửa sau khi ra đề). */
+function QuestionUsageModal({ qid, onClose }: { qid: number; onClose: () => void }) {
+  const { data, error, loading } = useAsync(() => get<any>(`/api/questions/${qid}/usage`), [qid]);
+  return (
+    <Modal title={`Câu #${qid} nằm trong các đề`} onClose={onClose} width={560}>
+      {loading ? (
+        <div className="su-row-meta">Đang tải…</div>
+      ) : error ? (
+        <div className="su-row-meta">{error}</div>
+      ) : (
+        <div className="su-list">
+          {(data?.exams ?? []).map((e: any) => (
+            <a key={e.id} className="su-row" href={`#/de-thi/${e.id}`} style={{ textDecoration: 'none', color: 'inherit', padding: '8px 0' }}>
+              <div className="su-row-main">
+                <div className="su-row-title">{e.title}{e.version > 1 ? ` (v${e.version})` : ''}</div>
+                <div className="su-row-meta">
+                  Câu {e.position}{e.part ? ` · Phần ${e.part}` : ''}{e.assigned ? ` · đã giao ${e.assigned} lần` : ''}{e.official ? ' · đề chính thức' : ''}
+                  {e.outdated && <span className="su-chip is-warn">Đề đang dùng nội dung cũ của câu</span>}
+                </div>
+              </div>
+            </a>
+          ))}
+          {(data?.exams ?? []).length === 0 && <div className="su-row-meta">Câu chưa nằm trong đề nào.</div>}
+        </div>
+      )}
+    </Modal>
   );
 }

@@ -2,6 +2,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { vnDay } from '../shared/spaced.mjs';
 
 const SCHEMA = `
@@ -200,6 +201,9 @@ const ADDED_COLUMNS = [
   ['exams', 'tags_json', 'TEXT'],
   // Vị trí câu trong đề gốc (vd "Phần II – Câu 1")
   ['questions', 'source_no', 'TEXT'],
+  // File đề gốc (Word/PDF) mà đề / câu được nhập từ đó
+  ['exams', 'document_id', 'INTEGER'],
+  ['questions', 'document_id', 'INTEGER'],
 ];
 
 export function migrate(db) {
@@ -211,6 +215,28 @@ export function migrate(db) {
       added.add(`${table}.${col}`);
     }
   }
+  // Lưu trữ đề kiểu "ngân hàng là lõi":
+  //  - question_contents: mỗi nội dung câu (đúng như lúc ra đề) lưu MỘT lần, nhận diện bằng mã băm;
+  //  - exam_items: đề gồm những câu nào, thứ tự, phần, trỏ tới đúng nội dung câu lúc ra đề;
+  //  - exam_variants: các mã đề;
+  //  - documents: file đề gốc.
+  // exams.snapshot_json chỉ còn dấu "@exam:<id>"; khi đọc, app dựng lại nội dung từ hai bảng trên.
+  db.exec(`CREATE TABLE IF NOT EXISTS question_contents (
+      id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, qid INTEGER NOT NULL, hash TEXT NOT NULL, body TEXT NOT NULL, created_at INTEGER NOT NULL,
+      UNIQUE (qid, hash));
+    CREATE TABLE IF NOT EXISTS exam_items (
+      exam_id INTEGER NOT NULL, pos INTEGER NOT NULL, part TEXT, qid INTEGER NOT NULL, content_id INTEGER,
+      type TEXT, topic TEXT, level INTEGER, grp TEXT, fixed_options INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (exam_id, pos));
+    CREATE INDEX IF NOT EXISTS ei_qid ON exam_items(qid);
+    CREATE TABLE IF NOT EXISTS exam_variants (
+      exam_id INTEGER NOT NULL, code TEXT NOT NULL, seed TEXT, PRIMARY KEY (exam_id, code));
+    CREATE TABLE IF NOT EXISTS documents (
+      id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, sha TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL,
+      data BLOB NOT NULL, uploaded_by INTEGER, created_at INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS doc_sha ON documents(school_id, sha);
+    CREATE TRIGGER IF NOT EXISTS exam_cleanup AFTER DELETE ON exams BEGIN
+      DELETE FROM exam_items WHERE exam_id = OLD.id; DELETE FROM exam_variants WHERE exam_id = OLD.id; END;`);
   // Thư mục riêng của từng giáo viên để xếp đề (một đề có thể nằm trong nhiều thư mục của nhiều người)
   db.exec(`CREATE TABLE IF NOT EXISTS exam_folders (
       id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, owner_id INTEGER NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL);
@@ -239,6 +265,62 @@ export function migrate(db) {
   }
 }
 
+const PART_OF = { mcq: 'I', tf: 'II', short: 'III' };
+const REF_PREFIX = '@exam:';
+
+/**
+ * Tách nội dung đề sang các bảng chuẩn: nội dung câu (không trùng lặp), đề–câu, mã đề.
+ * Chạy sau mọi lệnh ghi đề có kèm nội dung; đề đã chuẩn hóa thì bỏ qua.
+ */
+export function normalizeExams(db) {
+  const pending = db.prepare(`SELECT id, school_id, items_json, variants_json, snapshot_json FROM exams WHERE snapshot_json NOT LIKE '"${REF_PREFIX}%'`).all();
+  if (!pending.length) return 0;
+  const findContent = db.prepare('SELECT id FROM question_contents WHERE qid = ? AND hash = ?');
+  const addContent = db.prepare('INSERT INTO question_contents (school_id, qid, hash, body, created_at) VALUES (?,?,?,?,?)');
+  const delItems = db.prepare('DELETE FROM exam_items WHERE exam_id = ?');
+  const addItem = db.prepare('INSERT INTO exam_items (exam_id, pos, part, qid, content_id, type, topic, level, grp, fixed_options) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  const delVariants = db.prepare('DELETE FROM exam_variants WHERE exam_id = ?');
+  const addVariant = db.prepare('INSERT OR IGNORE INTO exam_variants (exam_id, code, seed) VALUES (?,?,?)');
+  const mark = db.prepare('UPDATE exams SET snapshot_json = ? WHERE id = ?');
+  const t = Date.now();
+  for (const e of pending) {
+    const items = JSON.parse(e.items_json || '[]');
+    const snapshot = JSON.parse(e.snapshot_json || '{}') || {};
+    const variants = JSON.parse(e.variants_json || '[]');
+    const contentOf = {};
+    for (const [qid, body] of Object.entries(snapshot)) {
+      const text = JSON.stringify(body);
+      const hash = crypto.createHash('sha256').update(text).digest('hex');
+      const found = findContent.get(Number(qid), hash);
+      contentOf[qid] = found ? found.id : Number(addContent.run(e.school_id, Number(qid), hash, text, t).lastInsertRowid);
+    }
+    delItems.run(e.id);
+    items.forEach((it, pos) => {
+      addItem.run(e.id, pos, PART_OF[it.type] ?? null, Number(it.qid), contentOf[it.qid] ?? null, it.type ?? null, it.topic ?? null, it.level ?? null, it.group ?? null, it.fixedOptions ? 1 : 0);
+    });
+    delVariants.run(e.id);
+    for (const v of Array.isArray(variants) ? variants : []) if (v?.code) addVariant.run(e.id, String(v.code), v.seed ?? null);
+    mark.run(JSON.stringify(`${REF_PREFIX}${e.id}`), e.id);
+  }
+  return pending.length;
+}
+
+/** Đề đã chuẩn hóa mà chỉ đổi danh sách câu / mã đề (không đổi nội dung): đồng bộ lại hai bảng, giữ nội dung đã trỏ. */
+export function resyncExamLists(db, examId) {
+  const e = db.prepare('SELECT id, items_json, variants_json FROM exams WHERE id = ?').get(examId);
+  if (!e) return;
+  const contentByQid = Object.fromEntries(db.prepare('SELECT qid, content_id FROM exam_items WHERE exam_id = ?').all(examId).map((r) => [r.qid, r.content_id]));
+  const items = JSON.parse(e.items_json || '[]');
+  db.prepare('DELETE FROM exam_items WHERE exam_id = ?').run(examId);
+  const addItem = db.prepare('INSERT INTO exam_items (exam_id, pos, part, qid, content_id, type, topic, level, grp, fixed_options) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  items.forEach((it, pos) => addItem.run(examId, pos, PART_OF[it.type] ?? null, Number(it.qid), contentByQid[it.qid] ?? null, it.type ?? null, it.topic ?? null, it.level ?? null, it.group ?? null, it.fixedOptions ? 1 : 0));
+  db.prepare('DELETE FROM exam_variants WHERE exam_id = ?').run(examId);
+  const addVariant = db.prepare('INSERT OR IGNORE INTO exam_variants (exam_id, code, seed) VALUES (?,?,?)');
+  for (const v of JSON.parse(e.variants_json || '[]') ?? []) if (v?.code) addVariant.run(examId, String(v.code), v.seed ?? null);
+}
+
+const EXAM_WRITE_RE = /^\s*(INSERT\s+INTO\s+exams\b|UPDATE\s+exams\s+SET\b[\s\S]*\b(snapshot_json|items_json|variants_json)\b)/i;
+
 const JSON_COLS = /_json$/;
 
 /** Đổi hàng có cột *_json thành đối tượng (bỏ hậu tố _json). */
@@ -257,16 +339,35 @@ export function openDb(file) {
   const db = new DatabaseSync(file);
   db.exec(SCHEMA);
   migrate(db);
+  // Dữ liệu cũ: đề còn chép nguyên nội dung câu → chuyển sang bảng chuẩn ngay khi mở CSDL
+  normalizeExams(db);
+  const contentStmt = db.prepare('SELECT i.qid, c.body FROM exam_items i JOIN question_contents c ON c.id = i.content_id WHERE i.exam_id = ?');
+  /** Dấu "@exam:<id>" trong cột snapshot → dựng lại nội dung câu của đề từ bảng chuẩn. */
+  const resolve = (row) => {
+    if (row && typeof row.snapshot === 'string' && row.snapshot.startsWith(REF_PREFIX)) {
+      const out = {};
+      for (const r of contentStmt.all(Number(row.snapshot.slice(REF_PREFIX.length)))) out[r.qid] = JSON.parse(r.body);
+      row.snapshot = out;
+    }
+    return row;
+  };
   const api = {
     raw: db,
     all(sql, ...p) {
-      return db.prepare(sql).all(...p).map(hydrate);
+      return db.prepare(sql).all(...p).map((r) => resolve(hydrate(r)));
     },
     get(sql, ...p) {
-      return hydrate(db.prepare(sql).get(...p));
+      return resolve(hydrate(db.prepare(sql).get(...p)));
     },
     run(sql, ...p) {
-      return db.prepare(sql).run(...p);
+      const r = db.prepare(sql).run(...p);
+      // Ghi đề kèm nội dung (tạo, sửa, đổi đáp án sau thi…) → tách ngay sang bảng chuẩn
+      if (EXAM_WRITE_RE.test(sql)) {
+        // Đổi riêng danh sách câu / mã đề của đề đã chuẩn hóa (lệnh kết thúc bằng "WHERE id = ?")
+        if (/^\s*UPDATE/i.test(sql) && !/snapshot_json/i.test(sql) && /WHERE\s+id\s*=\s*\?\s*$/i.test(sql)) resyncExamLists(db, Number(p[p.length - 1]));
+        normalizeExams(db);
+      }
+      return r;
     },
     tx(fn) {
       db.exec('BEGIN');

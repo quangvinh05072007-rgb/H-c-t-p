@@ -6,6 +6,7 @@ riêng, hay dùng AI ở máy của bạn) rồi đưa vào app bằng một **g
 - Chỉ có chữ và công thức → một file **`.json`**.
 - Có hình → một file **`.zip`** chứa `goi.json` và các file hình **`.png` hoặc `.jpg`** (mỗi hình ≤ 5 MB). Hình WebP, GIF, HEIC không được nhận vì không in ra PDF/Word được — hãy lưu lại dạng PNG/JPG.
 - Cả gói tối đa 50 MB, 2000 câu, 100 đề, 200 bài học.
+- **Đề gốc** (Word hoặc PDF) đặt trong thư mục `goc/` của `.zip`: app lưu cùng đề để tải lại và đối chiếu (tối đa 30 MB, cùng file thì không lưu hai lần). File Word gốc còn được dùng để tự lấy hình.
 
 Dùng AI để tạo gói: xem quy trình và lời nhắc mẫu ở [huong-dan-ai.md](huong-dan-ai.md).
 

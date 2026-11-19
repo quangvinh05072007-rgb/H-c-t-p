@@ -30,6 +30,7 @@ type Summary = {
   preview?: PreviewQ[];
   imageData?: Record<string, string>;
   missingImages?: string[];
+  original?: { name: string; size: number } | null;
 };
 type Done = {
   approved: number;
@@ -77,6 +78,7 @@ export function PackageImport() {
   const [pasted, setPasted] = useState('');
   const [pkgFile, setPkgFile] = useState<File | null>(null);
   const [docx, setDocx] = useState<File | null>(null);
+  const [origPdf, setOrigPdf] = useState<File | null>(null); // đề gốc dạng PDF: chỉ để lưu trữ, đối chiếu
   const [images, setImages] = useState<Record<string, Blob>>({}); // tên trong gói → ảnh
   const [summary, setSummary] = useState<Summary | null>(null);
   const [done, setDone] = useState<Done | null>(null);
@@ -90,13 +92,14 @@ export function PackageImport() {
 
   /** Gom mọi thứ thành một gói gửi lên: JSON trần nếu không có gì kèm, ngược lại nén .zip. */
   const buildPayload = async (): Promise<{ name: string; data: ArrayBuffer }> => {
-    const extras = Object.keys(images).length > 0 || docx;
+    const extras = Object.keys(images).length > 0 || docx || origPdf;
     if (pkgFile && /\.json$/i.test(pkgFile.name) && !extras) return { name: pkgFile.name, data: await pkgFile.arrayBuffer() };
     if (!pkgFile && !extras) return { name: 'goi.json', data: new TextEncoder().encode(pasted).buffer as ArrayBuffer };
     const zip = pkgFile && /\.zip$/i.test(pkgFile.name) ? await JSZip.loadAsync(await pkgFile.arrayBuffer()) : new JSZip();
     if (!pkgFile) zip.file('goi.json', pasted);
     else if (/\.json$/i.test(pkgFile.name)) zip.file('goi.json', await pkgFile.arrayBuffer());
-    if (docx) zip.file('_goc/de-goc.docx', await docx.arrayBuffer());
+    if (docx) zip.file(`_goc/${docx.name}`, await docx.arrayBuffer());
+    if (origPdf && !docx) zip.file(`_goc/${origPdf.name}`, await origPdf.arrayBuffer());
     for (const [name, blob] of Object.entries(images)) zip.file(name, await blob.arrayBuffer());
     return { name: 'goi.zip', data: await zip.generateAsync({ type: 'arraybuffer' }) };
   };
@@ -179,6 +182,7 @@ export function PackageImport() {
     setPasted('');
     setPkgFile(null);
     setDocx(null);
+    setOrigPdf(null);
     setImages({});
     setSummary(null);
     setDone(null);
@@ -199,8 +203,11 @@ export function PackageImport() {
       if (/\.docx$/i.test(f.name)) {
         recheckSoon.current = true;
         setDocx(f);
+      } else if (/\.pdf$/i.test(f.name)) {
+        recheckSoon.current = true;
+        setOrigPdf(f);
       } else if (IMG_EXT.test(f.name)) addImage(`hinh/${f.name}`, f);
-      else toast(`Bỏ qua ${f.name}: chỉ nhận file Word .docx hoặc ảnh PNG/JPG.`);
+      else toast(`Bỏ qua ${f.name}: chỉ nhận file Word .docx, PDF gốc hoặc ảnh PNG/JPG.`);
     }
     if (attachInput.current) attachInput.current.value = '';
   };
@@ -275,8 +282,8 @@ export function PackageImport() {
           <div className="pk-step">
             <span className="pk-num">3</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <b>Đề có hình? Đính kèm file Word gốc</b>
-              <p>App tự lấy hình trong file Word gắn vào đúng câu. Đề PDF thì dán ảnh chụp ở bước xem trước, hoặc dùng AI chạy được code để nó cắt sẵn.</p>
+              <b>Đính kèm đề gốc (Word hoặc PDF)</b>
+              <p>App lưu đề gốc cùng đề để đối chiếu về sau. File Word còn được dùng để tự lấy hình gắn vào đúng câu; đề PDF thì dán ảnh chụp hình ở bước xem trước, hoặc dùng AI chạy được code để nó cắt sẵn.</p>
               <div className="pk-attach">
                 <button type="button" className="btn sm" onClick={() => attachInput.current?.click()}>
                   <ImagePlus size={14} aria-hidden="true" /> Đính kèm Word gốc / ảnh
@@ -287,6 +294,12 @@ export function PackageImport() {
                     <button type="button" className="pk-x" onClick={() => setDocx(null)} aria-label="Bỏ file Word"><X size={12} aria-hidden="true" /></button>
                   </span>
                 )}
+                {origPdf && (
+                  <span className="su-chip">
+                    <FileText size={12} aria-hidden="true" /> {origPdf.name}
+                    <button type="button" className="pk-x" onClick={() => setOrigPdf(null)} aria-label="Bỏ file PDF gốc"><X size={12} aria-hidden="true" /></button>
+                  </span>
+                )}
                 {Object.keys(images).map((n) => (
                   <span key={n} className="su-chip">
                     {n.replace(/^hinh\//, '')}
@@ -294,7 +307,7 @@ export function PackageImport() {
                   </span>
                 ))}
               </div>
-              <input ref={attachInput} type="file" multiple accept=".docx,image/png,image/jpeg" hidden onChange={(e) => onAttach(e.target.files)} />
+              <input ref={attachInput} type="file" multiple accept=".docx,.pdf,image/png,image/jpeg" hidden onChange={(e) => onAttach(e.target.files)} />
             </div>
           </div>
           <div className="su-actions" style={{ marginTop: 4 }}>
@@ -322,6 +335,11 @@ export function PackageImport() {
           )}
           {summary.lessons.length > 0 && <div className="su-row-meta" style={{ padding: '4px 0' }}>Bài học: {summary.lessons.map((l) => l.name).join(' · ')}</div>}
 
+          {summary.original && (
+            <div className="su-row-meta" style={{ padding: '4px 0' }}>
+              <FileText size={13} aria-hidden="true" /> Sẽ lưu đề gốc: <b>{summary.original.name}</b> ({Math.round(summary.original.size / 1024)} KB)
+            </div>
+          )}
           {summary.warnings.length > 0 && (
             <div className="pk-notes">
               {summary.warnings.map((w, i) => (

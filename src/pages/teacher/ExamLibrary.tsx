@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Folder, FolderPlus, Lock, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
-import { del, get, post, put } from '../../api';
+import { del, download, get, post, put } from '../../api';
 import { EXAM_CATEGORIES } from '../../../shared/examCategory.mjs';
 import { TERM_LABEL } from '../../../shared/examMeta.mjs';
 import { ErrorBox, fmtScore, go, Loading, scoreColor, useApp, useAsync, useRoute } from '../../ui/kit';
@@ -414,6 +414,12 @@ export function ExamMetaPanel({ id, exam, onSaved }: { id: number; exam: any; on
         {(m.tags ?? []).map((t: string) => <span key={t}>#{t}</span>)}
         {exam.canEditMeta && !editing && <button type="button" className="su-link" onClick={() => setEditing(true)}>Sửa thông tin</button>}
       </div>
+      {exam.document && (
+        <div className="kl-meta-line">
+          <span>Đề gốc: <b>{exam.document.name}</b> ({Math.max(1, Math.round(exam.document.size / 1024))} KB)</span>
+          <button type="button" className="su-link" onClick={() => download(`/api/documents/${exam.document.id}`, exam.document.name).catch((e: any) => toast(e.message))}>Tải về</button>
+        </div>
+      )}
       <div className="kl-meta-line kl-muted">
         {st.classes.length ? `Đã giao: ${st.classes.join(', ')}` : 'Chưa giao lớp nào'}
         {st.submissions ? ` · ${st.submissions} bài đã chấm · ĐTB ${st.avgScore === null ? '—' : fmtScore(st.avgScore)}` : ''}
