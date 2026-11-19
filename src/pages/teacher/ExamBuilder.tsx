@@ -82,6 +82,8 @@ export function ExamBuilder() {
     const eid = query.get('examId');
     return eid && /^\d+$/.test(eid) ? Number(eid) : null;
   });
+  // Đề đang sửa đã dùng (đã giao / đã có người làm / đã tải gói in): lưu sẽ tạo phiên bản mới
+  const [lockInfo, setLockInfo] = useState<{ reason: string; version: number } | null>(null);
   const [preset, setPreset] = useState<keyof typeof PRESETS | 'custom'>('official');
   const [bp, setBp] = useState<Bp>(() => {
     const rawTopics = query.get('topics');
@@ -211,6 +213,7 @@ export function ExamBuilder() {
         .then((res) => {
           const ex = res.exam;
           setEditingExamId(ex.id);
+          setLockInfo(ex.locked ? { reason: ex.lockReason ?? 'đã dùng', version: ex.version ?? 1 } : null);
           setTitle(ex.title || 'Đề thi');
           setVariants(ex.variants?.length || 4);
           if (ex.blueprint && typeof ex.blueprint === 'object') {
@@ -505,8 +508,13 @@ export function ExamBuilder() {
         blueprint: bp,
       };
       if (editingExamId) {
-        const r = await put<{ id: number }>(`/api/exams/${editingExamId}`, payload);
-        toast('Đã cập nhật đề thi trong Kho đề.');
+        const r = await put<{ id: number; newVersion?: boolean; version?: number; reason?: string }>(`/api/exams/${editingExamId}`, payload);
+        if (r.newVersion) {
+          // Đề đã dùng: máy chủ giữ bản cũ cho lớp đã làm / phiếu đã in, lưu chỉnh sửa thành phiên bản mới
+          setEditingExamId(r.id);
+          setLockInfo(null);
+          toast(`Đề ${r.reason ?? 'đã dùng'} nên được lưu thành phiên bản v${r.version}. Lớp đã làm và phiếu đã in vẫn giữ bản cũ.`);
+        } else toast('Đã cập nhật đề thi trong Kho đề.');
         return r.id;
       } else {
         const r = await post<{ id: number }>('/api/exams', payload);
@@ -679,6 +687,13 @@ export function ExamBuilder() {
       <div className="no-print">
         <CreateExamActionBar active="build" classSuffix={classSuffix} />
       </div>
+
+      {lockInfo && (
+        <div className="no-print su-card" role="status" style={{ background: 'var(--warn-soft)', borderColor: 'transparent', fontSize: 13 }}>
+          <b>Đề này {lockInfo.reason} (phiên bản v{lockInfo.version}).</b> Khi lưu, app giữ nguyên bản cũ cho lớp đã làm và phiếu đã in,
+          chỉnh sửa của bạn được lưu thành phiên bản v{lockInfo.version + 1}.
+        </div>
+      )}
 
       {defaultClassId && (
         <div

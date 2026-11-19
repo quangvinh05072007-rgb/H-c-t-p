@@ -48,7 +48,10 @@ export function InfiniteQuestionBank({
   onCreateExamFromIds?: (ids: number[]) => void;
   classId?: number | null;
 }) {
-  const { meta, toast } = useApp();
+  const { meta, toast, user } = useApp();
+  const isOwner = user?.role === 'admin';
+  // Kho: '' tất cả · 'common' kho chung · 'mine' kho riêng của tôi · 'proposed' câu giáo viên đề xuất (chủ web)
+  const [scope, setScope] = useState<string>('');
 
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
@@ -99,6 +102,7 @@ export function InfiniteQuestionBank({
     if (grade) params.set('grade', grade);
     if (level) params.set('level', level);
     if (search.trim()) params.set('q', search.trim());
+    if (scope) params.set('scope', scope);
 
     try {
       const res = await get<any>(`/api/questions?${params.toString()}`);
@@ -125,7 +129,7 @@ export function InfiniteQuestionBank({
 
   useEffect(() => {
     loadBatch(true);
-  }, [status, type, topic, form, grade, level, search]);
+  }, [status, type, topic, form, grade, level, search, scope]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -160,6 +164,33 @@ export function InfiniteQuestionBank({
       loadBatch(true);
     } catch (e: any) {
       toast(e.message || 'Không duyệt được câu hỏi.');
+    } finally {
+      setBusyBulk(false);
+    }
+  };
+
+  const handleScopeAction = async (kind: 'propose' | 'adopt' | 'return') => {
+    if (!selectedIds.length) return;
+    let note = '';
+    if (kind === 'return') {
+      note = window.prompt('Lý do trả lại (giáo viên sẽ thấy):', '') ?? '';
+    }
+    setBusyBulk(true);
+    try {
+      if (kind === 'propose') {
+        const r = await post<any>('/api/questions/propose', { ids: selectedIds });
+        toast(`Đã đề xuất ${r.proposed} câu vào kho chung${r.skipped ? ` (${r.skipped} câu không phải câu riêng của bạn)` : ''}. Chủ web sẽ xem và duyệt.`);
+      } else if (kind === 'adopt') {
+        const r = await post<any>('/api/questions/adopt', { ids: selectedIds });
+        toast(`Đã nhận ${r.adopted.length} câu vào kho chung${r.rejected?.length ? `, ${r.rejected.length} câu còn thiếu thông tin` : ''}.`);
+      } else {
+        const r = await post<any>('/api/questions/return', { ids: selectedIds, note });
+        toast(`Đã trả lại ${r.returned} câu cho giáo viên.`);
+      }
+      setSelectedIds([]);
+      loadBatch(true);
+    } catch (e: any) {
+      toast(e.message || 'Không thực hiện được.');
     } finally {
       setBusyBulk(false);
     }
@@ -243,6 +274,12 @@ export function InfiniteQuestionBank({
   return (
     <div className="stack" style={{ position: 'relative', gap: 12 }}>
       {/* Single-Row Unified Filter Bar */}
+      <div className="seg" role="group" aria-label="Kho câu hỏi" style={{ marginBottom: 10 }}>
+        <button type="button" className={scope === '' ? 'on' : ''} onClick={() => setScope('')}>Tất cả</button>
+        <button type="button" className={scope === 'common' ? 'on' : ''} onClick={() => setScope('common')}>Kho chung</button>
+        {!isOwner && <button type="button" className={scope === 'mine' ? 'on' : ''} onClick={() => setScope('mine')}>Kho riêng của tôi</button>}
+        {isOwner && <button type="button" className={scope === 'proposed' ? 'on' : ''} onClick={() => setScope('proposed')}>Giáo viên đề xuất</button>}
+      </div>
       <div className="teacher-filter-bar">
         <div style={{ flex: '1 1 220px', position: 'relative' }}>
           <input
@@ -386,6 +423,17 @@ export function InfiniteQuestionBank({
             <button type="button" className="btn good sm" disabled={busyBulk} onClick={handleBulkApprove}>
               Duyệt
             </button>
+            {!isOwner && (
+              <button type="button" className="btn sm" disabled={busyBulk} onClick={() => handleScopeAction('propose')} title="Gửi câu riêng của bạn để chủ web xem và đưa vào kho chung">
+                Đề xuất vào kho chung
+              </button>
+            )}
+            {isOwner && scope === 'proposed' && (
+              <>
+                <button type="button" className="btn good sm" disabled={busyBulk} onClick={() => handleScopeAction('adopt')}>Nhận vào kho chung</button>
+                <button type="button" className="btn sm" disabled={busyBulk} onClick={() => handleScopeAction('return')}>Trả lại</button>
+              </>
+            )}
             <select
               className="input sm"
               style={{ width: 'auto', minHeight: 30, fontSize: 12 }}
@@ -460,10 +508,14 @@ export function InfiniteQuestionBank({
                   <span>· {LEVEL_LABEL[q.level] || `Mức ${q.level}`}</span>
                   <span>· {topicName(meta, q.topic)}</span>
                   {(q as any).form && <span className="su-chip">{(q as any).form}</span>}
+                  {(q as any).scope === 'common' && <span className="su-chip is-good">Kho chung</span>}
+                  {(q as any).scope === 'private' && <span className="su-chip">Kho riêng</span>}
+                  {(q as any).proposedAt && <span className="su-chip is-warn">Đã đề xuất</span>}
+                  {(q as any).reviewNote && <span className="su-chip is-bad" title={(q as any).reviewNote}>Bị trả lại: {(q as any).reviewNote}</span>}
                 </div>
               </div>
               <div className="su-bank-actions" onClick={(e) => e.stopPropagation()}>
-                {onEdit && <button type="button" className="btn ghost sm" onClick={() => onEdit(q)}>Sửa</button>}
+                {onEdit && (isOwner || (q as any).scope !== 'common') && <button type="button" className="btn ghost sm" onClick={() => onEdit(q)}>Sửa</button>}
                 {onHistory && <button type="button" className="btn ghost sm" onClick={() => onHistory(q.id)}>Lịch sử</button>}
                 {onDiscuss && <button type="button" className="btn ghost sm" onClick={() => onDiscuss(q.id)}>Góp ý</button>}
               </div>

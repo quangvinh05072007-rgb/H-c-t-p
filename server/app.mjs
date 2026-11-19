@@ -161,6 +161,37 @@ export function createApp(config = {}) {
     return e;
   }
 
+  /** Giáo viên thấy: kho chung, câu cũ, và câu riêng của mình. Chủ web (quản lý) thấy tất cả. */
+  function canSeeQuestion(user, q) {
+    return user.role === 'admin' || q.scope !== 'private' || q.created_by === user.id;
+  }
+  /** Sửa/xóa: chủ web mọi câu; giáo viên chỉ câu mình tạo và chưa vào kho chung. */
+  function canManageQuestion(user, q) {
+    if (user.role === 'admin') return true;
+    if (q.scope === 'common') return false;
+    return q.created_by === user.id;
+  }
+  const VISIBLE_Q_SQL = "(scope IS NULL OR scope != 'private' OR created_by = ?)";
+
+  /** Đề đã dùng (đã giao, đã có người làm, đã tải gói in) thì khóa: không sửa đè, không trộn lại mã đề. */
+  function examUsage(e) {
+    const assigned = db.get('SELECT COUNT(*) n FROM assignments WHERE exam_id = ?', e.id).n;
+    const attempts = db.get('SELECT COUNT(*) n FROM attempts WHERE exam_id = ?', e.id).n;
+    return { assigned, attempts, printed: Boolean(e.locked_at) && !assigned && !attempts };
+  }
+  function examLocked(e) {
+    if (e.locked_at) return true;
+    const u = examUsage(e);
+    return u.assigned > 0 || u.attempts > 0;
+  }
+  function lockReason(e) {
+    const u = examUsage(e);
+    if (u.assigned) return `đã giao ${u.assigned} lần`;
+    if (u.attempts) return `đã có ${u.attempts} lượt làm`;
+    if (e.locked_at) return 'đã tải gói in';
+    return null;
+  }
+
   function questionUsed(schoolId, qid) {
     if (db.get('SELECT 1 x FROM evidence WHERE school_id = ? AND qid = ? LIMIT 1', schoolId, qid)) return true;
     return db.all('SELECT items_json FROM exams WHERE school_id = ?', schoolId).some((e) => e.items.some((x) => x.qid === qid));
@@ -223,7 +254,17 @@ export function createApp(config = {}) {
       const exam = db.get('SELECT snapshot_json FROM exams WHERE id = ?', asg.exam_id);
       return exam.snapshot;
     }
-    return questionsMap(att.school_id, att.layout.map((x) => x.qid));
+    if (att.snapshot) return att.snapshot;
+    // Bài tự luyện: chụp câu hỏi đúng lúc làm để giáo viên sửa câu về sau không làm đổi bài cũ
+    const ids = att.layout.map((x) => x.qid);
+    let snap = null;
+    if (att.exam_id) {
+      const ex = db.get('SELECT snapshot_json FROM exams WHERE id = ?', att.exam_id);
+      if (ex?.snapshot && ids.every((id) => ex.snapshot[id])) snap = Object.fromEntries(ids.map((id) => [id, ex.snapshot[id]]));
+    }
+    snap ??= questionsMap(att.school_id, ids);
+    if (att.id) db.run('UPDATE attempts SET snapshot_json = ? WHERE id = ? AND snapshot_json IS NULL', JSON.stringify(snap), att.id);
+    return snap;
   }
 
   function publicItem(it, q, i, partIndex) {
@@ -738,6 +779,10 @@ export function createApp(config = {}) {
   route('GET', '/api/questions', STAFF, ({ user, query }) => {
     const where = ['school_id = ?'];
     const p = [user.school_id];
+    if (user.role !== 'admin') (where.push(VISIBLE_Q_SQL), p.push(user.id));
+    if (query.scope === 'mine') (where.push("scope = 'private' AND created_by = ?"), p.push(user.id));
+    else if (query.scope === 'common') where.push("(scope IS NULL OR scope = 'common')");
+    else if (query.scope === 'proposed') where.push("scope = 'private' AND proposed_at IS NOT NULL");
     if (query.status && query.status !== 'all') (where.push('status = ?'), p.push(query.status));
     else where.push("status != 'archived'");
     if (query.type) (where.push('type = ?'), p.push(query.type));
@@ -810,6 +855,9 @@ export function createApp(config = {}) {
       String(q.sourceStem ?? ''),
     );
     const newId = Number(r.lastInsertRowid);
+    // Chủ web → kho chung. Giáo viên → kho riêng; riêng trường bật "hai người duyệt" (tổ duyệt chéo) thì câu dùng chung trong tổ như cũ
+    const scope = user.role === 'admin' ? 'common' : reviewPolicy(user.school_id) === 'double' ? null : 'private';
+    db.run('UPDATE questions SET scope = ? WHERE id = ?', scope, newId);
     const form = cleanForm(q.form);
     if (form) db.run('UPDATE questions SET form = ? WHERE id = ?', form, newId);
     invalidateQuestionIndex(user.school_id);
@@ -866,7 +914,9 @@ export function createApp(config = {}) {
 
   route('PUT', '/api/questions/:id', STAFF, ({ user, params, body, ip }) => {
     const q = db.get('SELECT * FROM questions WHERE id = ? AND school_id = ?', params.id, user.school_id);
-    if (!q) fail(404, 'Không tìm thấy câu hỏi.');
+    if (!q || !canSeeQuestion(user, q)) fail(404, 'Không tìm thấy câu hỏi.');
+    if (q.scope === 'common' && user.role !== 'admin') deny(user, 'question_edit', `question:${q.id}`, 'Câu trong kho chung chỉ chủ web sửa được. Hãy sao chép về kho riêng nếu cần chỉnh.', ip);
+    if (q.scope === 'private' && !canManageQuestion(user, q)) deny(user, 'question_edit', `question:${q.id}`, 'Chỉ người tạo câu mới sửa được.', ip);
     if (Object.prototype.hasOwnProperty.call(body ?? {}, 'form')) db.run('UPDATE questions SET form = ? WHERE id = ?', cleanForm(body.form), q.id);
     const EDITABLE_FIELDS = ['type', 'stem', 'options', 'answer', 'explanation', 'topic', 'level', 'distractors', 'group_id', 'ocrText', 'sourceStem'];
     const patch = {};
@@ -924,7 +974,11 @@ export function createApp(config = {}) {
     db.tx(() => {
       for (const id of ids) {
         const q = db.get('SELECT * FROM questions WHERE id = ? AND school_id = ?', id, user.school_id);
-        if (!q) continue;
+        if (!q || !canSeeQuestion(user, q)) continue;
+        if ((q.scope === 'common' && user.role !== 'admin') || (q.scope === 'private' && !canManageQuestion(user, q))) {
+          rejected.push({ id, errors: ['Câu trong kho chung chỉ chủ web duyệt; câu riêng chỉ người tạo duyệt.'] });
+          continue;
+        }
         const errs = validateQuestion(toQuestion(q));
         if (errs.length) {
           rejected.push({ id, errors: errs });
@@ -966,7 +1020,7 @@ export function createApp(config = {}) {
   route('POST', '/api/questions/archive', STAFF, ({ user, body, ip }) => {
     const ids = (Array.isArray(body.ids) ? body.ids : []).map(Number);
     const rows = ids.map((id) => db.get('SELECT id, status, created_by FROM questions WHERE id = ? AND school_id = ?', id, user.school_id)).filter(Boolean);
-    const foreign = rows.filter((q) => user.role !== 'admin' && q.created_by !== user.id);
+    const foreign = rows.filter((q) => !canManageQuestion(user, q));
     if (foreign.length) deny(user, 'question_archive', foreign.map((q) => `question:${q.id}`).join(','), 'Chỉ người tạo câu hoặc quản lý mới ẩn được câu này.', ip);
     for (const q of rows) db.run("UPDATE questions SET status = 'archived', updated_at = ? WHERE id = ?", now(), q.id);
     invalidateQuestionIndex(user.school_id);
@@ -1320,7 +1374,7 @@ export function createApp(config = {}) {
       let skipped = 0, approved = 0, drafts = 0;
       for (const q of p.questions) {
         const stem = bindImages(q.stem, idByName);
-        const dup = db.get("SELECT id, status FROM questions WHERE school_id = ? AND type = ? AND stem = ? AND status != 'archived' LIMIT 1", user.school_id, q.type, stem);
+        const dup = db.get(`SELECT id, status FROM questions WHERE school_id = ? AND type = ? AND stem = ? AND status != 'archived' AND ${VISIBLE_Q_SQL} LIMIT 1`, user.school_id, q.type, stem, user.id);
         if (dup) {
           idByKey[q.key] = dup.id;
           skipped++;
@@ -1361,6 +1415,7 @@ export function createApp(config = {}) {
           user.school_id, e.title, JSON.stringify({ counts, durationMin: e.durationMin, origin }), JSON.stringify(norm), e.durationMin,
           JSON.stringify(variants), JSON.stringify(qmap), user.id, now(), e.shareWithSchool ? 'school' : 'private', 'Toán', e.category ?? null,
         );
+        if (user.role === 'admin' && e.shareWithSchool) db.run('UPDATE exams SET official = 1 WHERE id = ?', r.lastInsertRowid);
         exams.push({ id: Number(r.lastInsertRowid), title: e.title });
       }
 
@@ -1439,7 +1494,7 @@ export function createApp(config = {}) {
     if (body.action === 'set_level' && ![1, 2, 3].includes(Number(body.value))) fail(400, 'Mức độ phải là 1, 2 hoặc 3.');
     const rows = ids.map((id) => db.get('SELECT * FROM questions WHERE id = ? AND school_id = ?', id, user.school_id)).filter(Boolean);
     if (rows.length !== ids.length) fail(404, 'Có câu không thuộc ngân hàng của trường.');
-    const foreign = rows.filter((q) => user.role !== 'admin' && q.created_by !== user.id);
+    const foreign = rows.filter((q) => !canManageQuestion(user, q));
     if (foreign.length) deny(user, `bulk_${body.action}`, foreign.map((q) => `question:${q.id}`).join(','), 'Chỉ người tạo câu hoặc quản lý mới sửa hàng loạt được câu này.', ip);
     const before = [];
     db.tx(() => {
@@ -1615,7 +1670,7 @@ export function createApp(config = {}) {
     const qmap = questionsMap(user.school_id, items.map((x) => Number(x.qid)));
     for (const it of items) {
       const q = qmap[it.qid];
-      if (!q) fail(400, `Câu #${it.qid} không có trong ngân hàng của trường.`);
+      if (!q || !canSeeQuestion(user, q)) fail(400, `Câu #${it.qid} không có trong ngân hàng của trường.`);
       if (q.status !== 'approved') fail(400, `Câu #${it.qid} chưa được duyệt. Chỉ câu đã duyệt mới vào đề.`);
     }
     const norm = items.map((x) => ({ qid: Number(x.qid), type: qmap[x.qid].type, topic: qmap[x.qid].topic, level: qmap[x.qid].level, group: qmap[x.qid].group_id ?? null, fixedOptions: imageOptions(qmap[x.qid]) }));
@@ -1635,9 +1690,59 @@ export function createApp(config = {}) {
       body.dept ? String(body.dept).trim().slice(0, 40) : null,
       cleanCategory(body.category),
     );
+    if (user.role === 'admin' && body.visibility === 'school' && body.official !== false) db.run('UPDATE exams SET official = 1 WHERE id = ?', r.lastInsertRowid);
     audit(user, 'exam_create', `#${r.lastInsertRowid} ${body.title}`, ip);
     return { id: Number(r.lastInsertRowid) };
   });
+  route('POST', '/api/exams/:id/official', ['admin'], ({ user, params, body, ip }) => {
+    const e = db.get('SELECT id, school_id, visibility, superseded_by FROM exams WHERE id = ?', params.id);
+    if (!e || e.school_id !== user.school_id) fail(404, 'Không tìm thấy đề.');
+    const on = Boolean(body.official);
+    db.run("UPDATE exams SET official = ?, visibility = CASE WHEN ? = 1 THEN 'school' ELSE visibility END WHERE id = ?", on ? 1 : 0, on ? 1 : 0, e.id);
+    audit(user, 'exam_official', `#${e.id} → ${on ? 'chính thức' : 'thôi chính thức'}`, ip, { target: `exam:${e.id}` });
+    return { ok: true, official: on };
+  });
+
+  // Giáo viên đề xuất câu riêng vào kho chung; chủ web nhận hoặc trả lại
+  route('POST', '/api/questions/propose', ['teacher'], ({ user, body, ip }) => {
+    const ids = (Array.isArray(body.ids) ? body.ids : []).map(Number);
+    const rows = ids.map((id) => db.get('SELECT id, scope, created_by, status FROM questions WHERE id = ? AND school_id = ?', id, user.school_id)).filter(Boolean);
+    const ok = rows.filter((q) => q.scope === 'private' && q.created_by === user.id && q.status !== 'archived');
+    for (const q of ok) db.run('UPDATE questions SET proposed_at = ?, review_note = NULL WHERE id = ?', now(), q.id);
+    audit(user, 'question_propose', ok.map((q) => `#${q.id}`).join(' '), ip);
+    return { proposed: ok.length, skipped: ids.length - ok.length };
+  });
+  route('POST', '/api/questions/adopt', ['admin'], ({ user, body, ip }) => {
+    const ids = (Array.isArray(body.ids) ? body.ids : []).map(Number);
+    const adopted = [];
+    const rejected = [];
+    db.tx(() => {
+      for (const id of ids) {
+        const q = db.get('SELECT * FROM questions WHERE id = ? AND school_id = ?', id, user.school_id);
+        if (!q || q.scope !== 'private') continue;
+        const errs = validateQuestion(toQuestion(q));
+        if (errs.length) {
+          rejected.push({ id, errors: errs });
+          continue;
+        }
+        recordVersion(q, user, 'Nhận vào kho chung');
+        db.run("UPDATE questions SET scope = 'common', status = 'approved', approved_by = ?, proposed_at = NULL, review_note = NULL, updated_at = ? WHERE id = ?", user.id, now(), id);
+        adopted.push(id);
+      }
+    });
+    invalidateQuestionIndex(user.school_id);
+    audit(user, 'question_adopt', adopted.map((x) => `#${x}`).join(' '), ip);
+    return { adopted, rejected };
+  });
+  route('POST', '/api/questions/return', ['admin'], ({ user, body, ip }) => {
+    const ids = (Array.isArray(body.ids) ? body.ids : []).map(Number);
+    const note = String(body.note ?? '').trim().slice(0, 300) || null;
+    let n = 0;
+    for (const id of ids) n += Number(db.run("UPDATE questions SET proposed_at = NULL, review_note = ? WHERE id = ? AND school_id = ? AND scope = 'private'", note, id, user.school_id).changes ?? 0);
+    audit(user, 'question_return', ids.map((x) => `#${x}`).join(' '), ip);
+    return { returned: n };
+  });
+
   route('PUT', '/api/exams/:id/category', STAFF, ({ user, params, body, ip }) => {
     const e = db.get('SELECT id, school_id, created_by, title FROM exams WHERE id = ?', params.id);
     if (!e || e.school_id !== user.school_id) fail(404, 'Không tìm thấy đề.');
@@ -1659,7 +1764,7 @@ export function createApp(config = {}) {
     const qmap = questionsMap(user.school_id, items.map((x) => Number(x.qid)));
     for (const it of items) {
       const q = qmap[it.qid];
-      if (!q) fail(400, `Câu #${it.qid} không có trong ngân hàng của trường.`);
+      if (!q || !canSeeQuestion(user, q)) fail(400, `Câu #${it.qid} không có trong ngân hàng của trường.`);
       if (q.status !== 'approved') fail(400, `Câu #${it.qid} chưa được duyệt. Chỉ câu đã duyệt mới vào đề.`);
     }
     const norm = items.map((x) => ({
@@ -1672,6 +1777,21 @@ export function createApp(config = {}) {
     }));
     const varCount = Math.min(24, Math.max(1, Number(body.variants) || e.variants?.length || 4));
     const variants = makeVariants(norm, varCount, body.seed ?? `${e.id}-${now()}`);
+    if (e.superseded_by) fail(409, 'Đây là phiên bản cũ của đề. Hãy mở phiên bản mới nhất để sửa.');
+    if (examLocked(e)) {
+      // Đề đã dùng: giữ nguyên bản cũ cho lớp đã làm / phiếu đã in, lưu chỉnh sửa thành phiên bản mới
+      const r = db.run(
+        `INSERT INTO exams (school_id, title, blueprint_json, items_json, duration_min, variants_json, snapshot_json, created_by, created_at, visibility, dept, category, official, version, root_id, parent_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        e.school_id, String(body.title).trim(), JSON.stringify(body.blueprint ?? e.blueprint ?? {}), JSON.stringify(norm),
+        Math.max(5, Number(body.durationMin) || e.duration_min || 90), JSON.stringify(makeVariants(norm, varCount, `${e.id}-v${(e.version ?? 1) + 1}-${now()}`)),
+        JSON.stringify(qmap), e.created_by, now(), e.visibility, e.dept, e.category, e.official ?? 0, (e.version ?? 1) + 1, e.root_id ?? e.id, e.parent_id,
+      );
+      const newId = Number(r.lastInsertRowid);
+      db.run('UPDATE exams SET superseded_by = ? WHERE id = ?', newId, e.id);
+      audit(user, 'exam_new_version', `#${e.id} → #${newId} (v${(e.version ?? 1) + 1})`, ip, { target: `exam:${newId}`, old: { from: e.id, reason: lockReason(e) } });
+      return { id: newId, ok: true, newVersion: true, version: (e.version ?? 1) + 1, previousId: e.id, reason: lockReason(e) };
+    }
     db.run(
       'UPDATE exams SET title = ?, blueprint_json = ?, items_json = ?, duration_min = ?, variants_json = ?, snapshot_json = ? WHERE id = ?',
       String(body.title).trim(),
@@ -1688,13 +1808,14 @@ export function createApp(config = {}) {
   // Đề xem được: của mình + đề dùng chung của trường. "Hot" = lượt dùng (giao bài + nhân bản) và đánh giá sao, có trọng số theo số người đánh giá.
   route('GET', '/api/exams', STAFF, ({ user, query }) => {
     const rows = db.all(
-      `SELECT e.id, e.title, e.items_json, e.duration_min, e.created_at, e.visibility, e.dept, e.category, e.created_by, u.display_name author,
+      `SELECT e.id, e.title, e.items_json, e.duration_min, e.created_at, e.visibility, e.dept, e.category, e.created_by, e.locked_at, e.version, e.official, e.superseded_by, u.display_name author,
+         (SELECT COUNT(*) FROM attempts t WHERE t.exam_id = e.id) attempted,
          (SELECT COUNT(*) FROM assignments a WHERE a.exam_id = e.id) assigned,
          (SELECT COUNT(*) FROM exams c WHERE c.parent_id = e.id) clones,
          (SELECT AVG(stars) FROM exam_ratings r WHERE r.exam_id = e.id) stars,
          (SELECT COUNT(*) FROM exam_ratings r WHERE r.exam_id = e.id) rated
        FROM exams e JOIN users u ON u.id = e.created_by
-       WHERE e.school_id = ? AND (e.visibility = 'school' OR e.created_by = ? OR ? = 'admin') ORDER BY e.created_at DESC`,
+       WHERE e.school_id = ? AND e.superseded_by IS NULL AND (e.visibility = 'school' OR e.created_by = ? OR ? = 'admin') ORDER BY e.created_at DESC`,
       user.school_id,
       user.id,
       user.role,
@@ -1710,6 +1831,10 @@ export function createApp(config = {}) {
       dept: e.dept,
       category: examCategory(e.category, e.title, e.duration_min),
       categorySet: Boolean(cleanCategory(e.category)),
+      version: e.version ?? 1,
+      official: Boolean(e.official),
+      locked: Boolean(e.locked_at) || e.assigned > 0 || e.attempted > 0,
+      status: e.assigned > 0 || e.attempted > 0 ? 'used' : e.locked_at ? 'printed' : 'ready',
       uses: e.assigned + e.clones,
       ratingAvg: e.stars === null ? null : Math.round(e.stars * 10) / 10,
       ratingCount: e.rated,
@@ -1773,7 +1898,11 @@ export function createApp(config = {}) {
     const e = visibleExam(user, params.id);
     const rating = db.get('SELECT AVG(stars) avg, COUNT(*) n FROM exam_ratings WHERE exam_id = ?', e.id);
     return { exam: { id: e.id, title: e.title, durationMin: e.duration_min, items: e.items, variants: e.variants.map((v) => v.code), blueprint: e.blueprint,
-      mine: e.created_by === user.id, visibility: e.visibility, dept: e.dept, category: examCategory(e.category, e.title, e.duration_min), categorySet: Boolean(cleanCategory(e.category)), author: db.get('SELECT display_name FROM users WHERE id = ?', e.created_by)?.display_name,
+      mine: e.created_by === user.id, visibility: e.visibility, dept: e.dept, category: examCategory(e.category, e.title, e.duration_min), categorySet: Boolean(cleanCategory(e.category)),
+      version: e.version ?? 1, official: Boolean(e.official), locked: examLocked(e), lockReason: lockReason(e), supersededBy: e.superseded_by ?? null,
+      versions: db.all('SELECT id, version, created_at, superseded_by FROM exams WHERE school_id = ? AND (id = ? OR root_id = ?) ORDER BY version', e.school_id, e.root_id ?? e.id, e.root_id ?? e.id)
+        .map((v) => ({ id: v.id, version: v.version ?? 1, createdAt: v.created_at, current: !v.superseded_by, assigned: db.get('SELECT COUNT(*) n FROM assignments WHERE exam_id = ?', v.id).n })),
+      author: db.get('SELECT display_name FROM users WHERE id = ?', e.created_by)?.display_name,
       ratingAvg: rating.avg === null ? null : Math.round(rating.avg * 10) / 10, ratingCount: rating.n,
       myRating: db.get('SELECT stars FROM exam_ratings WHERE exam_id = ? AND user_id = ?', e.id, user.id)?.stars ?? null,
     }, questions: e.snapshot };
@@ -1785,6 +1914,7 @@ export function createApp(config = {}) {
   route('POST', '/api/exams/:id/regenerate-variants', STAFF, ({ user, params, body, ip }) => {
     const e = visibleExam(user, params.id);
     if (e.created_by !== user.id && user.role !== 'admin') deny(user, 'exam_shuffle_variants', `exam:${e.id}`, 'Chỉ người ra đề hoặc quản lý mới tạo lại mã đề.', ip);
+    if (examLocked(e)) fail(409, `Đề ${lockReason(e)}: không trộn lại mã đề để phiếu đã in và bài đã làm vẫn khớp. Muốn đổi, hãy sửa đề để tạo phiên bản mới.`);
     const count = Math.min(24, Math.max(1, Number(body.count) || 4));
     const startCode = Math.max(100, Number(body.startCode) || 101);
     const seedPrefix = String(body.seed || `${e.id}-${now()}`);
@@ -1872,6 +2002,7 @@ export function createApp(config = {}) {
   });
   route('GET', '/api/exams/:id/variants-zip', STAFF, async ({ user, params, ip }) => {
     const e = visibleExam(user, params.id);
+    if (!e.locked_at) db.run('UPDATE exams SET locked_at = ? WHERE id = ?', now(), e.id);
     const school = db.get('SELECT name FROM schools WHERE id = ?', user.school_id);
     const imgRes = imageResolver(user.school_id);
     const variants = (e.variants?.length ? e.variants : [{ code: '101', seed: `${e.id}-101` }]).map((v) => ({
@@ -2821,7 +2952,7 @@ export function createApp(config = {}) {
     if (!q) fail(404, 'Không tìm thấy câu hỏi.');
     const target = `question:${q.id}`;
     if (q.school_id !== user.school_id) deny(user, 'question_delete', target, 'Câu hỏi không thuộc trường của bạn.', ip);
-    if (user.role !== 'admin' && q.created_by !== user.id) deny(user, 'question_delete', target, 'Chỉ người tạo câu hoặc quản lý mới xóa được câu này.', ip);
+    if (!canManageQuestion(user, q)) deny(user, 'question_delete', target, 'Chỉ người tạo câu (khi câu còn ở kho riêng) hoặc chủ web mới xóa được câu này.', ip);
     const reason = needReason(body);
     // Xóa mềm: câu chuyển sang "lưu trữ", đề đã giao và lịch sử làm bài giữ nguyên.
     db.run("UPDATE questions SET status = 'archived', updated_at = ? WHERE id = ?", now(), q.id);
@@ -3499,10 +3630,12 @@ export function createApp(config = {}) {
       `SELECT e.id, e.title, e.duration_min, e.blueprint_json, e.items_json, e.variants_json, e.dept, e.category, e.created_at, u.display_name author
        FROM exams e
        LEFT JOIN users u ON u.id = e.created_by
-       WHERE e.school_id = ? AND (e.visibility = 'school' OR e.visibility IS NULL)
+       WHERE e.school_id = ? AND e.official = 1 AND e.superseded_by IS NULL
        ORDER BY e.id DESC`,
       user.school_id,
     );
+    // Lần làm trên phiên bản cũ của đề vẫn tính vào đề hiện tại
+    const rootOf = Object.fromEntries(db.all('SELECT id, root_id FROM exams WHERE school_id = ?', user.school_id).map((r) => [r.id, r.root_id ?? r.id]));
     const attempts = db.all(
       `SELECT id, exam_id, title, mode, score10, status, started_at, submitted_at
        FROM attempts
@@ -3514,8 +3647,9 @@ export function createApp(config = {}) {
     const byExam = {};
     const titleToId = {};
     for (const e of rows) if (!(e.title in titleToId)) titleToId[e.title] = e.id;
+    const currentByRoot = Object.fromEntries(rows.map((e) => [rootOf[e.id] ?? e.id, e.id]));
     for (const att of attempts) {
-      const eid = att.exam_id ?? titleToId[att.title];
+      const eid = att.exam_id ? currentByRoot[rootOf[att.exam_id] ?? att.exam_id] : titleToId[att.title];
       if (!eid) continue;
       (byExam[eid] ??= []).push(att);
     }
@@ -3574,7 +3708,7 @@ export function createApp(config = {}) {
     const examId = posInt(body.examId);
     if (!examId) fail(400, 'Thiếu mã đề thi.');
     const mode = body.mode === 'timed' ? 'timed' : 'practice';
-    const exam = db.get("SELECT * FROM exams WHERE id = ? AND school_id = ? AND (visibility = 'school' OR visibility IS NULL)", examId, user.school_id);
+    const exam = db.get('SELECT * FROM exams WHERE id = ? AND school_id = ? AND official = 1 AND superseded_by IS NULL', examId, user.school_id);
     if (!exam) fail(404, 'Không tìm thấy đề thi.');
     const items = exam.items && exam.items.length ? exam.items : [];
     if (!items.length) fail(400, 'Đề thi chưa có câu hỏi.');

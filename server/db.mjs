@@ -177,12 +177,36 @@ const ADDED_COLUMNS = [
   ['questions', 'form', 'TEXT'],
   ['exams', 'category', 'TEXT'],
   ['attempts', 'exam_id', 'INTEGER'],
+  // Vòng đời đề: khóa khi đã dùng; sửa đề đã khóa tạo phiên bản mới (root_id = đề gốc, superseded_by = bản thay thế)
+  ['exams', 'locked_at', 'INTEGER'],
+  ['exams', 'version', 'INTEGER NOT NULL DEFAULT 1'],
+  ['exams', 'root_id', 'INTEGER'],
+  ['exams', 'superseded_by', 'INTEGER'],
+  // Đề chính thức của chủ web: chỉ đề này hiện ở mục Đề thi của học sinh
+  ['exams', 'official', 'INTEGER NOT NULL DEFAULT 0'],
+  // Bài tự luyện chụp lại câu hỏi lúc làm, sửa câu sau đó không đổi bài cũ
+  ['attempts', 'snapshot_json', 'TEXT'],
+  // Kho câu: NULL = câu cũ (dùng chung như trước), 'common' = kho chung của chủ web, 'private' = kho riêng của người tạo
+  ['questions', 'scope', 'TEXT'],
+  ['questions', 'proposed_at', 'INTEGER'],
+  ['questions', 'review_note', 'TEXT'],
 ];
 
 export function migrate(db) {
+  const added = new Set();
   for (const [table, col, def] of ADDED_COLUMNS) {
     const has = db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
-    if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+    if (!has) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+      added.add(`${table}.${col}`);
+    }
+  }
+  // Lần đầu có "đề chính thức": giữ nguyên những gì học sinh đang thấy (đề dùng chung của trường)
+  if (added.has('exams.official')) db.exec("UPDATE exams SET official = 1 WHERE visibility = 'school'");
+  // Đề đã giao hoặc đã có người làm thì khóa ngay
+  if (added.has('exams.locked_at')) {
+    db.exec(`UPDATE exams SET locked_at = created_at WHERE id IN (SELECT exam_id FROM assignments)
+             OR id IN (SELECT exam_id FROM attempts WHERE exam_id IS NOT NULL)`);
   }
   // Nhật ký chỉ thêm: CSDL từ chối sửa/xóa dù là qua API hay câu lệnh trực tiếp.
   db.exec(`CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT, 'Nhật ký chỉ được thêm, không được sửa'); END;
@@ -268,6 +292,9 @@ export function toQuestion(row) {
     parent_id: r.parent_id,
     tag_confidence: r.tag_confidence,
     created_by: r.created_by,
+    scope: r.scope ?? null,
+    proposedAt: r.proposed_at ?? null,
+    reviewNote: r.review_note ?? null,
     approved_by: r.approved_by,
     created_at: r.created_at,
     updated_at: r.updated_at,

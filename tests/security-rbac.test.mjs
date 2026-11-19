@@ -124,10 +124,12 @@ test('Variant regeneration, private practice start, and unapproved bank endpoint
   const lan = client();
   const minh = client();
   const student = client();
+  const admin = client();
 
   await lan.login('gv.lan');
   await minh.login('gv.minh');
   await student.login('hs.an.nm');
+  await admin.login('quanly');
 
   // Draft question (not approved)
   const draftQ = await lan.post('/api/questions', {
@@ -186,7 +188,11 @@ test('Variant regeneration, private practice start, and unapproved bank endpoint
   const startPriv = await student.post('/api/student/practice-exams/start', { examId: privateExam.data.id });
   assert.equal(startPriv.status, 404);
 
-  // Student CAN start practice on a school-visible exam
+  // Đề giáo viên chia sẻ chỉ dùng chung giữa giáo viên; học sinh chỉ làm được đề chính thức của chủ web
+  const startShared = await student.post('/api/student/practice-exams/start', { examId: sharedExam.data.id });
+  assert.equal(startShared.status, 404);
+  assert.equal((await lan.post(`/api/exams/${sharedExam.data.id}/official`, { official: true })).status, 403, 'giáo viên không tự đặt đề chính thức');
+  assert.equal((await admin.post(`/api/exams/${sharedExam.data.id}/official`, { official: true })).status, 200);
   const startPub = await student.post('/api/student/practice-exams/start', { examId: sharedExam.data.id });
   assert.equal(startPub.status, 200);
 });

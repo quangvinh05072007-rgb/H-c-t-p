@@ -98,7 +98,7 @@ export function seedSample(app) {
     const snap = Object.fromEntries(items.map((x) => [x.qid, qmap[x.qid]]));
     const variants = [0, 1, 2, 3].map((i) => ({ code: String(101 + i), seed: `${title}-${i}` }));
     return Number(
-      db.run('INSERT INTO exams (school_id, title, blueprint_json, items_json, duration_min, variants_json, snapshot_json, created_by, created_at, dept) VALUES (?,?,?,?,?,?,?,?,?,?)', ids.school, title, JSON.stringify(blueprint), JSON.stringify(items), blueprint.durationMin ?? 90, JSON.stringify(variants), JSON.stringify(snap), by, at, dept).lastInsertRowid,
+      db.run('INSERT INTO exams (school_id, title, blueprint_json, items_json, duration_min, variants_json, snapshot_json, created_by, created_at, dept, official) VALUES (?,?,?,?,?,?,?,?,?,?,1)', ids.school, title, JSON.stringify(blueprint), JSON.stringify(items), blueprint.durationMin ?? 90, JSON.stringify(variants), JSON.stringify(snap), by, at, dept).lastInsertRowid,
     );
   };
   const assign = (examId, classId, title, mode, openAt, closeAt, duration, by, moduleId = null) =>

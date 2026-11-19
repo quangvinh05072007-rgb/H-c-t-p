@@ -331,8 +331,6 @@ export function Exams() {
         >
           {exams.map((e: any) => {
             const totalQ = (e.counts?.mcq ?? 0) + (e.counts?.tf ?? 0) + (e.counts?.short ?? 0);
-            const deptName = e.dept || 'Toán';
-            const testCode = `MÃ: DE-${String(e.id).padStart(2, '0')}`;
 
             return (
               <article
@@ -351,14 +349,14 @@ export function Exams() {
                 }}
               >
                 <div>
-                  <div className="meta-inline-line" style={{ marginBottom: 6 }}>
-                    <span className="tabular-nums" style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--ink-2)' }}>
-                      {testCode}
+                  <div className="meta-inline-line" style={{ marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
+                    <span className="su-chip">{EXAM_CATEGORIES.find((c) => c.code === e.category)?.label ?? 'Đề'}</span>
+                    {e.official && <span className="su-chip is-good" title="Hiện ở mục Đề thi của học sinh">Chính thức</span>}
+                    <span className={`su-chip ${e.status === 'used' ? 'is-warn' : ''}`} title={e.locked ? 'Đề đã dùng: sửa sẽ tạo phiên bản mới' : 'Chưa dùng: sửa thẳng được'}>
+                      {e.status === 'used' ? 'Đang dùng · đã khóa' : e.status === 'printed' ? 'Đã in · đã khóa' : 'Sẵn sàng'}
                     </span>
-                    <span>·</span>
-                    <span style={{ fontWeight: 600, color: 'var(--primary)' }}>{deptName}</span>
-                    <span>·</span>
-                    <span style={{ color: e.mine ? 'var(--good)' : 'var(--ink-3)', fontWeight: e.mine ? 600 : 400 }}>
+                    {e.version > 1 && <span className="su-chip">v{e.version}</span>}
+                    <span style={{ color: e.mine ? 'var(--good)' : 'var(--ink-3)', fontWeight: e.mine ? 600 : 400, fontSize: 12 }}>
                       {e.mine ? 'Của bạn' : e.visibility === 'school' ? 'Dùng chung' : 'Riêng tư'}
                     </span>
                   </div>
@@ -579,6 +577,48 @@ export function ExamDetail({ id }: { id: number }) {
         </div>
       </div>
 
+      <section className="card" style={{ padding: '10px 14px' }} aria-label="Trạng thái và phiên bản">
+        <div className="row between" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <div className="small">
+            <b>Phiên bản v{exam.version ?? 1}</b>
+            {exam.supersededBy ? (
+              <span className="muted"> · bản cũ, đã có bản mới hơn</span>
+            ) : exam.locked ? (
+              <span className="muted"> · {exam.lockReason}: đã khóa. Sửa đề sẽ tạo phiên bản mới, lớp đã làm vẫn giữ bản này.</span>
+            ) : (
+              <span className="muted"> · chưa dùng, sửa thẳng được</span>
+            )}
+          </div>
+          {user.role === 'admin' && !exam.supersededBy && (
+            <label className="small" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={Boolean(exam.official)}
+                onChange={async (ev) => {
+                  try {
+                    await post(`/api/exams/${id}/official`, { official: ev.target.checked });
+                    toast(ev.target.checked ? 'Đề đã hiện ở mục Đề thi của học sinh.' : 'Đã gỡ đề khỏi mục Đề thi của học sinh.');
+                    reload();
+                  } catch (err: any) {
+                    toast(err.message);
+                  }
+                }}
+              />
+              Đề chính thức (hiện cho học sinh)
+            </label>
+          )}
+        </div>
+        {(exam.versions?.length ?? 0) > 1 && (
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+            {exam.versions.map((v: any) => (
+              <a key={v.id} href={`#/de-thi/${v.id}`} className={`badge ${v.id === exam.id ? 'blue' : ''}`} style={{ textDecoration: 'none' }}>
+                v{v.version}{v.current ? ' (mới nhất)' : ''}{v.assigned ? ` · giao ${v.assigned} lần` : ''}
+              </a>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* 2. Navigation Tab Bar */}
       <div
         style={{
@@ -726,6 +766,7 @@ export function ExamDetail({ id }: { id: number }) {
             })}
           </div>
 
+
           <details className="card exam-sharing">
             <summary>
               <span><Icon name="school" /> Loại đề · Chia sẻ & đánh giá</span>
@@ -773,7 +814,7 @@ export function ExamDetail({ id }: { id: number }) {
                   <div className="row">
                     {[
                       ['private', 'Lưu riêng tư'],
-                      ['school', 'Chia sẻ với trường'],
+                      ['school', 'Chia sẻ với giáo viên trong trường'],
                     ].map(([visibility, label]) => (
                       <button
                         key={visibility}
