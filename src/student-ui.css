@@ -1693,3 +1693,67 @@
 .pk-expl { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 12.5px; color: var(--ink-2); }
 .pk-img { display: block; max-width: min(100%, 360px); max-height: 260px; margin: 6px 0; border-radius: 6px; background: #fff; border: 1px solid var(--line); }
 .pk-img-missing { display: inline-block; margin: 4px 0; padding: 4px 8px; border-radius: 6px; background: var(--bad-soft); color: var(--bad); font-size: 12px; font-weight: 700; }
+
+/* ===================== KHO ĐỀ (giáo viên) ===================== */
+.kl-page { display: flex; flex-direction: column; gap: 14px; }
+.kl-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.kl-head h1 { margin: 0; font-size: 20px; font-weight: 800; color: var(--ink); }
+.kl-head p { margin: 3px 0 0; font-size: 12.5px; color: var(--ink-3); }
+.kl-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.kl-body { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 16px; align-items: start; }
+.kl-tree { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); max-height: calc(100vh - 40px); overflow: auto; }
+.kl-tree-sec { display: flex; flex-direction: column; gap: 2px; }
+.kl-tree-sec + .kl-tree-sec { padding-top: 12px; border-top: 1px dashed var(--line); }
+.kl-tree-title { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); margin: 0 4px 4px; }
+.kl-node {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 8px;
+  background: transparent; font: inherit; font-size: 13px; color: var(--ink-2); text-align: left; cursor: pointer;
+}
+.kl-node span { display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kl-node em { font-style: normal; font-size: 11.5px; font-weight: 700; color: var(--ink-3); background: var(--surface-2); border-radius: 999px; padding: 0 7px; flex-shrink: 0; }
+.kl-node:hover { background: var(--surface-2); color: var(--ink); }
+.kl-node.on { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
+.kl-node.on em { background: var(--surface); color: var(--primary); }
+.kl-sub { padding-left: 14px; }
+.kl-leaf i { width: 8px; height: 8px; border-radius: 50%; background: var(--tone); display: inline-block; }
+.kl-empty-note { font-size: 12px; color: var(--ink-3); padding: 2px 8px; }
+.kl-icon-btn { display: inline-grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 7px; background: transparent; color: var(--ink-3); cursor: pointer; flex-shrink: 0; }
+.kl-icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+.kl-icon-btn.is-on { color: var(--primary); }
+.kl-folder-row { display: flex; align-items: center; gap: 2px; }
+.kl-folder-row .kl-icon-btn { opacity: 0; }
+.kl-folder-row:hover .kl-icon-btn, .kl-folder-row .kl-icon-btn:focus-visible { opacity: 1; }
+.kl-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.kl-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.kl-search { position: relative; display: flex; align-items: center; flex: 1 1 220px; }
+.kl-search svg { position: absolute; left: 10px; color: var(--ink-3); }
+.kl-search input { width: 100%; padding-left: 30px; min-height: 34px; }
+.kl-crumbs { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.kl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.kl-card {
+  position: relative; display: flex; flex-direction: column; gap: 7px; padding: 14px 14px 12px; border: 1px solid var(--line); border-radius: 14px;
+  background: linear-gradient(180deg, var(--tone-bg) 0%, var(--surface) 40%); box-shadow: var(--shadow-sm); transition: box-shadow 0.15s, border-color 0.15s;
+}
+.kl-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 4px; border-radius: 14px 14px 0 0; background: var(--tone); }
+.kl-card:hover { box-shadow: var(--shadow-hover); border-color: var(--tone); }
+.kl-chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.kl-chips .su-chip { display: inline-flex; align-items: center; gap: 3px; }
+.kl-title { font-size: 15px; font-weight: 750; line-height: 1.35; color: var(--ink); text-decoration: none; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.kl-title:hover { color: var(--tone); }
+.kl-meta { font-size: 12.5px; color: var(--ink-2); }
+.kl-meta-2 { color: var(--ink-3); }
+.kl-usage { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--ink-2); padding: 6px 8px; border-radius: 8px; background: var(--surface-2); }
+.kl-muted { color: var(--ink-3); }
+.kl-tags { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11.5px; color: var(--tone); font-weight: 600; }
+.kl-actions { display: flex; align-items: center; gap: 6px; margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--line); }
+.kl-actions .btn.primary { flex: 1; justify-content: center; }
+.kl-folder-pick { position: relative; margin-left: auto; }
+.kl-menu { position: absolute; right: 0; bottom: 32px; z-index: 5; min-width: 200px; display: flex; flex-direction: column; gap: 4px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-lg); }
+.kl-menu-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); padding: 3px 2px; cursor: pointer; }
+@media (max-width: 860px) {
+  .kl-body { grid-template-columns: 1fr; }
+  .kl-tree { position: static; max-height: none; }
+}
+.kl-meta-panel { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 4px; }
+.kl-meta-line { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--ink-2); align-items: center; }
+.kl-meta-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-top: 8px; }

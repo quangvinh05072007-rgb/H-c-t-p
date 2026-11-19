@@ -3,11 +3,14 @@
 // Đặc tả cho người soạn gói: docs/goi-nhap.md.
 
 import { cleanCategory, EXAM_CATEGORY_CODES } from './examCategory.mjs';
+import { cleanExamMeta } from './examMeta.mjs';
 import { TOPIC_BY_CODE } from './topics.mjs';
 import { repairPackageText, restoreControlChars } from './packageRepair.mjs';
 
 export const PACKAGE_FORMAT = 'smartexam-package';
 export const PACKAGE_VERSION = 1;
+/** Bản 2: một gói = một đề, có thông tin đề (năm học, khối, học kỳ…) và chia Phần I/II/III. Bản 1 vẫn nhận. */
+export const PACKAGE_VERSIONS = [1, 2];
 export const PACKAGE_LIMITS = { questions: 2000, exams: 100, lessons: 200, textLength: 20000 };
 
 const TYPES = new Set(['mcq', 'tf', 'short']);
@@ -70,12 +73,16 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
   }
   controlFixes = 0;
   if (pkg.format !== PACKAGE_FORMAT) errors.push({ where: 'Gói', message: `Thiếu "format": "${PACKAGE_FORMAT}".` });
-  if (Number(pkg.version) !== PACKAGE_VERSION) errors.push({ where: 'Gói', message: `Phiên bản gói phải là ${PACKAGE_VERSION}.` });
+  if (!PACKAGE_VERSIONS.includes(Number(pkg.version))) errors.push({ where: 'Gói', message: 'Phiên bản gói phải là 1 hoặc 2.' });
   if (errors.length) return { source: '', questions: [], exams: [], lessons: [], errors, warnings };
 
   const source = text(pkg.source).slice(0, 200);
   const rawQs = Array.isArray(pkg.questions) ? pkg.questions : [];
-  const rawExams = Array.isArray(pkg.exams) ? pkg.exams : [];
+  // Bản 2: "exam" là một đối tượng; thứ tự câu lấy từ "sections" (Phần I, II, III) nếu có
+  const v2Exam = pkg.exam && typeof pkg.exam === 'object' && !Array.isArray(pkg.exam)
+    ? { ...pkg.exam, questions: Array.isArray(pkg.exam.sections) ? pkg.exam.sections.flatMap((sec) => (Array.isArray(sec?.questions) ? sec.questions : [])) : pkg.exam.questions }
+    : null;
+  const rawExams = [...(Array.isArray(pkg.exams) ? pkg.exams : []), ...(v2Exam ? [v2Exam] : [])];
   const rawLessons = Array.isArray(pkg.lessons) ? pkg.lessons : [];
   if (!rawQs.length && !rawLessons.length) errors.push({ where: 'Gói', message: 'Gói không có câu hỏi hay bài học nào.' });
   if (rawQs.length > PACKAGE_LIMITS.questions) errors.push({ where: 'Gói', message: `Tối đa ${PACKAGE_LIMITS.questions} câu mỗi gói.` });
@@ -141,6 +148,7 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
       level,
       group_id: text(q.group) ? text(q.group).slice(0, 40) : null,
       form: text(q.form).slice(0, 60) || null,
+      sourceNo: text(q.sourceNo).slice(0, 60) || null,
       needsReview,
     });
   });
@@ -166,8 +174,12 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
     if (!(variants >= 1 && variants <= 24)) problems.push('"variants" phải từ 1 đến 24');
     const category = e?.category == null || e.category === '' ? null : cleanCategory(e.category);
     if (e?.category && !category) problems.push(`"category" phải là một trong: ${EXAM_CATEGORY_CODES.join(', ')}`);
+    const metaIn = {};
+    for (const k of ['schoolYear', 'grade', 'term', 'session', 'source', 'date', 'examDate', 'tags']) if (e?.[k] !== undefined) metaIn[k] = e[k];
+    const meta = cleanExamMeta(metaIn);
+    problems.push(...meta.errors.map((m) => m.replace(/\.$/, '')));
     if (problems.length) return errors.push({ where, message: problems.join('; ') + '.' });
-    exams.push({ title, keys, durationMin, variants, category, shareWithSchool: e?.shareWithSchool !== false });
+    exams.push({ title, keys, durationMin, variants, category, meta: meta.value, shareWithSchool: e?.shareWithSchool !== false });
   });
 
   // ---- Bài học Tự học ----

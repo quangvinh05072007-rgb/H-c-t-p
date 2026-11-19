@@ -21,6 +21,7 @@ import { mapDocxImages } from '../shared/docxImageMap.mjs';
 import { buildAiPrompt } from '../shared/aiPrompt.mjs';
 import { repairPackageText } from '../shared/packageRepair.mjs';
 import { cleanCategory, examCategory, CATEGORY_LABEL } from '../shared/examCategory.mjs';
+import { cleanExamMeta, examMetaView } from '../shared/examMeta.mjs';
 import { buildInsights } from '../shared/insights.mjs';
 import { exportAnswerSheetDocx } from '../shared/exportAnswerSheetDocx.mjs';
 import { TOPICS, TOPIC_BY_CODE, LEVELS, SOURCES, SOURCE_HINT, ERROR_TYPES, QUESTION_TYPES } from '../shared/topics.mjs';
@@ -190,6 +191,28 @@ export function createApp(config = {}) {
     if (u.attempts) return `đã có ${u.attempts} lượt làm`;
     if (e.locked_at) return 'đã tải gói in';
     return null;
+  }
+
+  const META_COLS = { schoolYear: 'school_year', grade: 'grade', term: 'term', session: 'session', source: 'source', examDate: 'exam_date' };
+  function writeExamMeta(examId, meta) {
+    for (const [k, col] of Object.entries(META_COLS)) if (k in meta) db.run(`UPDATE exams SET ${col} = ? WHERE id = ?`, meta[k], examId);
+    if ('tags' in meta) db.run('UPDATE exams SET tags_json = ? WHERE id = ?', JSON.stringify(meta.tags ?? []), examId);
+  }
+  /** Mọi phiên bản cùng gốc với đề (để gộp thống kê lớp đã giao, điểm TB). */
+  function examVersionIds(e) {
+    const root = e.root_id ?? e.id;
+    return db.all('SELECT id FROM exams WHERE id = ? OR root_id = ?', root, root).map((r) => r.id);
+  }
+  function examStats(e) {
+    const ids = examVersionIds(e);
+    const ph = ids.map(() => '?').join(',');
+    const classes = db.all(`SELECT DISTINCT c.name FROM assignments a JOIN classes c ON c.id = a.class_id WHERE a.exam_id IN (${ph}) ORDER BY c.name`, ...ids).map((r) => r.name);
+    const s = db.get(
+      `SELECT AVG(t.score10) avg, COUNT(*) n FROM attempts t LEFT JOIN assignments a ON a.id = t.assignment_id
+       WHERE t.status != 'in_progress' AND t.score10 IS NOT NULL AND (a.exam_id IN (${ph}) OR t.exam_id IN (${ph}))`,
+      ...ids, ...ids,
+    );
+    return { classes, avgScore: s.avg === null ? null : Math.round(s.avg * 100) / 100, submissions: s.n };
   }
 
   function questionUsed(schoolId, qid) {
@@ -1031,12 +1054,12 @@ export function createApp(config = {}) {
   // ---- NGÂN HÀNG: ĐỘ PHỦ (chuyên đề × mức × loại) và CÂU CẦN SỬA (gom từ mọi lần dùng) ----
   route('GET', '/api/bank/forms', STAFF, ({ user, query }) => {
     const rows = query.topic
-      ? db.all("SELECT form, COUNT(*) n FROM questions WHERE school_id = ? AND topic = ? AND form IS NOT NULL AND status != 'archived' GROUP BY form ORDER BY n DESC", user.school_id, String(query.topic))
-      : db.all("SELECT form, COUNT(*) n FROM questions WHERE school_id = ? AND form IS NOT NULL AND status != 'archived' GROUP BY form ORDER BY n DESC LIMIT 200", user.school_id);
+      ? db.all(`SELECT form, COUNT(*) n FROM questions WHERE school_id = ? AND topic = ? AND form IS NOT NULL AND status != 'archived' AND ${VISIBLE_Q_SQL} GROUP BY form ORDER BY n DESC`, user.school_id, String(query.topic), user.role === 'admin' ? -1 : user.id)
+      : db.all(`SELECT form, COUNT(*) n FROM questions WHERE school_id = ? AND form IS NOT NULL AND status != 'archived' AND ${VISIBLE_Q_SQL} GROUP BY form ORDER BY n DESC LIMIT 200`, user.school_id, user.role === 'admin' ? -1 : user.id);
     return { forms: rows.map((r) => ({ form: r.form, n: r.n })) };
   });
   route('GET', '/api/bank/coverage', STAFF, ({ user }) => {
-    const rows = db.all("SELECT topic, level, type, COUNT(*) n FROM questions WHERE school_id = ? AND status = 'approved' GROUP BY topic, level, type", user.school_id);
+    const rows = db.all(`SELECT topic, level, type, COUNT(*) n FROM questions WHERE school_id = ? AND status = 'approved' AND (${VISIBLE_Q_SQL} OR ? = 'admin') GROUP BY topic, level, type`, user.school_id, user.id, user.role);
     const cell = {};
     for (const r of rows) cell[`${r.topic}|${r.level}|${r.type}`] = r.n;
     const topics = TOPICS.map((t) => {
@@ -1092,7 +1115,7 @@ export function createApp(config = {}) {
         }
       });
     }
-    const qs = db.all("SELECT * FROM questions WHERE school_id = ? AND status != 'archived'", user.school_id).map(toQuestion);
+    const qs = db.all(`SELECT * FROM questions WHERE school_id = ? AND status != 'archived' AND (${VISIBLE_Q_SQL} OR ? = 'admin')`, user.school_id, user.id, user.role).map(toQuestion);
     const out = [];
     const stemKey = {};
     for (const q of qs) {
@@ -1394,6 +1417,7 @@ export function createApp(config = {}) {
           form: q.form,
         }, 'imported', status, { origin });
         idByKey[q.key] = id;
+        if (q.sourceNo) db.run('UPDATE questions SET source_no = ? WHERE id = ?', q.sourceNo, id);
         if (status === 'approved') approved++; else drafts++;
       }
 
@@ -1416,6 +1440,7 @@ export function createApp(config = {}) {
           JSON.stringify(variants), JSON.stringify(qmap), user.id, now(), e.shareWithSchool ? 'school' : 'private', 'Toán', e.category ?? null,
         );
         if (user.role === 'admin' && e.shareWithSchool) db.run('UPDATE exams SET official = 1 WHERE id = ?', r.lastInsertRowid);
+        writeExamMeta(Number(r.lastInsertRowid), e.meta ?? {});
         exams.push({ id: Number(r.lastInsertRowid), title: e.title });
       }
 
@@ -1691,6 +1716,8 @@ export function createApp(config = {}) {
       cleanCategory(body.category),
     );
     if (user.role === 'admin' && body.visibility === 'school' && body.official !== false) db.run('UPDATE exams SET official = 1 WHERE id = ?', r.lastInsertRowid);
+    const meta = cleanExamMeta(body.meta ?? {});
+    if (!meta.errors.length) writeExamMeta(Number(r.lastInsertRowid), meta.value);
     audit(user, 'exam_create', `#${r.lastInsertRowid} ${body.title}`, ip);
     return { id: Number(r.lastInsertRowid) };
   });
@@ -1743,6 +1770,68 @@ export function createApp(config = {}) {
     return { returned: n };
   });
 
+  route('PUT', '/api/exams/:id/meta', STAFF, ({ user, params, body, ip }) => {
+    const e = db.get('SELECT id, school_id, created_by, title FROM exams WHERE id = ?', params.id);
+    if (!e || e.school_id !== user.school_id) fail(404, 'Không tìm thấy đề.');
+    if (e.created_by !== user.id && user.role !== 'admin') deny(user, 'exam_meta', `exam:${e.id}`, 'Chỉ người tạo đề hoặc chủ web mới sửa thông tin đề.', ip);
+    const { value, errors } = cleanExamMeta(body ?? {});
+    if (errors.length) fail(400, errors.join(' '));
+    if (Object.prototype.hasOwnProperty.call(body ?? {}, 'category')) {
+      const c = cleanCategory(body.category);
+      if (body.category && !c) fail(400, 'Loại đề không hợp lệ.');
+      db.run('UPDATE exams SET category = ? WHERE id = ?', c, e.id);
+    }
+    if (body?.title !== undefined) {
+      const t = String(body.title).trim().slice(0, 200);
+      if (!t) fail(400, 'Đặt tên đề.');
+      db.run('UPDATE exams SET title = ? WHERE id = ?', t, e.id);
+    }
+    writeExamMeta(e.id, value);
+    audit(user, 'exam_meta', `#${e.id}`, ip, { target: `exam:${e.id}`, new: { ...value, category: body?.category, title: body?.title } });
+    const row = db.get('SELECT * FROM exams WHERE id = ?', e.id);
+    return { ok: true, meta: examMetaView(row), category: examCategory(row.category, row.title, row.duration_min), title: row.title };
+  });
+
+  // Thư mục riêng của giáo viên
+  route('GET', '/api/exam-folders', STAFF, ({ user }) => ({
+    folders: db.all(
+      'SELECT f.id, f.name, (SELECT COUNT(*) FROM exam_folder_items i JOIN exams e ON e.id = i.exam_id WHERE i.folder_id = f.id AND e.superseded_by IS NULL) n FROM exam_folders f WHERE f.owner_id = ? ORDER BY f.name',
+      user.id,
+    ),
+  }));
+  route('POST', '/api/exam-folders', STAFF, ({ user, body }) => {
+    const name = String(body?.name ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (!name) fail(400, 'Đặt tên thư mục.');
+    if (db.get('SELECT COUNT(*) n FROM exam_folders WHERE owner_id = ?', user.id).n >= 100) fail(400, 'Tối đa 100 thư mục.');
+    const r = db.run('INSERT INTO exam_folders (school_id, owner_id, name, created_at) VALUES (?,?,?,?)', user.school_id, user.id, name, now());
+    return { id: Number(r.lastInsertRowid), name };
+  });
+  const ownFolder = (user, id) => {
+    const f = db.get('SELECT * FROM exam_folders WHERE id = ? AND owner_id = ?', id, user.id);
+    if (!f) fail(404, 'Không tìm thấy thư mục.');
+    return f;
+  };
+  route('PUT', '/api/exam-folders/:id', STAFF, ({ user, params, body }) => {
+    const f = ownFolder(user, params.id);
+    const name = String(body?.name ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (!name) fail(400, 'Đặt tên thư mục.');
+    db.run('UPDATE exam_folders SET name = ? WHERE id = ?', name, f.id);
+    return { ok: true };
+  });
+  route('DELETE', '/api/exam-folders/:id', STAFF, ({ user, params }) => {
+    const f = ownFolder(user, params.id);
+    db.run('DELETE FROM exam_folder_items WHERE folder_id = ?', f.id);
+    db.run('DELETE FROM exam_folders WHERE id = ?', f.id);
+    return { ok: true };
+  });
+  route('POST', '/api/exam-folders/:id/items', STAFF, ({ user, params, body }) => {
+    const f = ownFolder(user, params.id);
+    const e = visibleExam(user, Number(body?.examId));
+    if (body?.add === false) db.run('DELETE FROM exam_folder_items WHERE folder_id = ? AND exam_id = ?', f.id, e.id);
+    else db.run('INSERT OR IGNORE INTO exam_folder_items (folder_id, exam_id, added_at) VALUES (?,?,?)', f.id, e.id, now());
+    return { ok: true };
+  });
+
   route('PUT', '/api/exams/:id/category', STAFF, ({ user, params, body, ip }) => {
     const e = db.get('SELECT id, school_id, created_by, title FROM exams WHERE id = ?', params.id);
     if (!e || e.school_id !== user.school_id) fail(404, 'Không tìm thấy đề.');
@@ -1789,6 +1878,9 @@ export function createApp(config = {}) {
       );
       const newId = Number(r.lastInsertRowid);
       db.run('UPDATE exams SET superseded_by = ? WHERE id = ?', newId, e.id);
+      db.run('UPDATE exams SET school_year = ?, grade = ?, term = ?, session = ?, source = ?, exam_date = ?, tags_json = ? WHERE id = ?',
+        e.school_year, e.grade, e.term, e.session, e.source, e.exam_date, e.tags ? JSON.stringify(e.tags) : null, newId);
+      db.run('UPDATE OR IGNORE exam_folder_items SET exam_id = ? WHERE exam_id = ?', newId, e.id);
       audit(user, 'exam_new_version', `#${e.id} → #${newId} (v${(e.version ?? 1) + 1})`, ip, { target: `exam:${newId}`, old: { from: e.id, reason: lockReason(e) } });
       return { id: newId, ok: true, newVersion: true, version: (e.version ?? 1) + 1, previousId: e.id, reason: lockReason(e) };
     }
@@ -1808,7 +1900,8 @@ export function createApp(config = {}) {
   // Đề xem được: của mình + đề dùng chung của trường. "Hot" = lượt dùng (giao bài + nhân bản) và đánh giá sao, có trọng số theo số người đánh giá.
   route('GET', '/api/exams', STAFF, ({ user, query }) => {
     const rows = db.all(
-      `SELECT e.id, e.title, e.items_json, e.duration_min, e.created_at, e.visibility, e.dept, e.category, e.created_by, e.locked_at, e.version, e.official, e.superseded_by, u.display_name author,
+      `SELECT e.id, e.title, e.items_json, e.duration_min, e.created_at, e.visibility, e.dept, e.category, e.created_by, e.locked_at, e.version, e.official, e.superseded_by, e.root_id,
+         e.school_year, e.grade, e.term, e.session, e.source, e.exam_date, e.tags_json, e.variants_json, u.display_name author,
          (SELECT COUNT(*) FROM attempts t WHERE t.exam_id = e.id) attempted,
          (SELECT COUNT(*) FROM assignments a WHERE a.exam_id = e.id) assigned,
          (SELECT COUNT(*) FROM exams c WHERE c.parent_id = e.id) clones,
@@ -1820,7 +1913,14 @@ export function createApp(config = {}) {
       user.id,
       user.role,
     );
+    const folderMap = {};
+    for (const r of db.all('SELECT i.exam_id, i.folder_id FROM exam_folder_items i JOIN exam_folders f ON f.id = i.folder_id WHERE f.owner_id = ?', user.id)) (folderMap[r.exam_id] ??= []).push(r.folder_id);
     let list = rows.map((e) => ({
+      ...examMetaView(e),
+      ...examStats(e),
+      folderIds: folderMap[e.id] ?? [],
+      questionCount: e.items.length,
+      variantCount: e.variants?.length ?? 0,
       id: e.id,
       title: e.title,
       durationMin: e.duration_min,
@@ -1900,6 +2000,7 @@ export function createApp(config = {}) {
     return { exam: { id: e.id, title: e.title, durationMin: e.duration_min, items: e.items, variants: e.variants.map((v) => v.code), blueprint: e.blueprint,
       mine: e.created_by === user.id, visibility: e.visibility, dept: e.dept, category: examCategory(e.category, e.title, e.duration_min), categorySet: Boolean(cleanCategory(e.category)),
       version: e.version ?? 1, official: Boolean(e.official), locked: examLocked(e), lockReason: lockReason(e), supersededBy: e.superseded_by ?? null,
+      meta: examMetaView(e), stats: examStats(e), canEditMeta: e.created_by === user.id || user.role === 'admin',
       versions: db.all('SELECT id, version, created_at, superseded_by FROM exams WHERE school_id = ? AND (id = ? OR root_id = ?) ORDER BY version', e.school_id, e.root_id ?? e.id, e.root_id ?? e.id)
         .map((v) => ({ id: v.id, version: v.version ?? 1, createdAt: v.created_at, current: !v.superseded_by, assigned: db.get('SELECT COUNT(*) n FROM assignments WHERE exam_id = ?', v.id).n })),
       author: db.get('SELECT display_name FROM users WHERE id = ?', e.created_by)?.display_name,

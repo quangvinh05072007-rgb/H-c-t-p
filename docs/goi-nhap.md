@@ -27,6 +27,35 @@ Nhập ở **Nhập đề → Gói nhập chuẩn**. App **kiểm tra trước**
 
 `format` và `version` bắt buộc đúng như trên. `source` là tên nguồn, ghi vào nguồn gốc câu hỏi.
 
+## Bản 2 (khuyên dùng): một gói = một đề
+
+```json
+{
+  "format": "smartexam-package",
+  "version": 2,
+  "source": "Sở GD&ĐT Hà Nội – Khảo sát – Lần 1 – 2026",
+  "exam": {
+    "title": "Khảo sát chất lượng lớp 12 – Lần 1",
+    "category": "khao-sat", "schoolYear": "2025-2026", "grade": 12, "term": "HK2",
+    "session": "Lần 1", "source": "Sở GD&ĐT Hà Nội", "date": "2026-03-15",
+    "durationMin": 90, "variants": 4, "shareWithSchool": true,
+    "sections": [
+      { "part": "I", "questions": ["c1", "c2"] },
+      { "part": "II", "questions": ["c3"] },
+      { "part": "III", "questions": ["c4"] }
+    ]
+  },
+  "questions": [ { "id": "c1", "sourceNo": "Phần I – Câu 1", "...": "..." } ]
+}
+```
+
+- `exam` thay cho `exams`: thông tin đề dùng để xếp đề trong **Kho đề** (Năm học → Khối → Loại đề). Thiếu trường nào thì bỏ trống,
+  app tự suy ra năm học và học kỳ theo ngày, khối theo chuyên đề các câu.
+- `schoolYear` dạng `2025-2026`; `grade` 10/11/12; `term` `HK1`, `HK2` hoặc `CN`; `date` dạng `2026-03-15`; `tags` danh sách thẻ.
+- `sections`: thứ tự câu theo từng phần như đề gốc. Không có `sections` thì dùng `exam.questions`.
+- `sourceNo` ở mỗi câu: vị trí câu trong đề gốc (vd `"Phần II – Câu 1"`).
+- Bản 1 (`exams` là danh sách) vẫn nhập được; các trường thông tin đề ở trên cũng dùng được trong từng mục của `exams`.
+
 ## Câu hỏi — `questions`
 
 | Trường | Bắt buộc | Ý nghĩa |

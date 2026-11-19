@@ -190,6 +190,16 @@ const ADDED_COLUMNS = [
   ['questions', 'scope', 'TEXT'],
   ['questions', 'proposed_at', 'INTEGER'],
   ['questions', 'review_note', 'TEXT'],
+  // Thông tin tổ chức đề
+  ['exams', 'school_year', 'TEXT'],
+  ['exams', 'grade', 'INTEGER'],
+  ['exams', 'term', 'TEXT'],
+  ['exams', 'session', 'TEXT'],
+  ['exams', 'source', 'TEXT'],
+  ['exams', 'exam_date', 'TEXT'],
+  ['exams', 'tags_json', 'TEXT'],
+  // Vị trí câu trong đề gốc (vd "Phần II – Câu 1")
+  ['questions', 'source_no', 'TEXT'],
 ];
 
 export function migrate(db) {
@@ -201,6 +211,12 @@ export function migrate(db) {
       added.add(`${table}.${col}`);
     }
   }
+  // Thư mục riêng của từng giáo viên để xếp đề (một đề có thể nằm trong nhiều thư mục của nhiều người)
+  db.exec(`CREATE TABLE IF NOT EXISTS exam_folders (
+      id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, owner_id INTEGER NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS exam_folder_items (
+      folder_id INTEGER NOT NULL, exam_id INTEGER NOT NULL, added_at INTEGER NOT NULL, PRIMARY KEY (folder_id, exam_id));
+    CREATE INDEX IF NOT EXISTS ef_owner ON exam_folders(owner_id);`);
   // Lần đầu có "đề chính thức": giữ nguyên những gì học sinh đang thấy (đề dùng chung của trường)
   if (added.has('exams.official')) db.exec("UPDATE exams SET official = 1 WHERE visibility = 'school'");
   // Đề đã giao hoặc đã có người làm thì khóa ngay

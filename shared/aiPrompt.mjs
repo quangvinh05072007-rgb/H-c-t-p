@@ -48,20 +48,31 @@ CHỈ CHÉP LẠI: không sửa nội dung, không thêm bớt câu, giữ nguy�
 
 ${output}
 
-CẤU TRÚC:
+CẤU TRÚC (một gói = một đề):
 {
   "format": "smartexam-package",
-  "version": 1,
+  "version": 2,
   "source": "Đơn vị – Kỳ thi – Lần – Năm (lấy từ đầu đề)",
-  "questions": [ ... ],
-  "exams": [ { "title": "...", "category": "...", "durationMin": 90, "variants": 4, "questions": ["c1", "c2", "..."], "shareWithSchool": true } ],
-  "lessons": []
+  "exam": {
+    "title": "Tên đề như trên bản gốc",
+    "category": "khao-sat",
+    "schoolYear": "2025-2026", "grade": 12, "term": "HK2",
+    "session": "Lần 1", "source": "Sở GD&ĐT Hà Nội", "date": "2026-03-15",
+    "durationMin": 90, "variants": 4, "shareWithSchool": true,
+    "sections": [
+      { "part": "I", "questions": ["c1", "c2", "..."] },
+      { "part": "II", "questions": ["..."] },
+      { "part": "III", "questions": ["..."] }
+    ]
+  },
+  "questions": [ ... ]
 }
 
 MỖI CÂU HỎI:
-{ "id": "c1", "type": "mcq", "topic": "T12.NGUYENHAM", "level": 2, "form": "Tích phân từng phần",
+{ "id": "c1", "sourceNo": "Phần I – Câu 1", "type": "mcq", "topic": "T12.NGUYENHAM", "level": 2, "form": "Tích phân từng phần",
   "stem": "...", "options": ["...", "...", "...", "..."], "answer": "B", "explanation": "..." }
 - "id": c1, c2, c3… đánh số liên tục trong TOÀN đề (đề chia Phần I, II, III đánh lại "Câu 1" thì id vẫn chạy tiếp).
+- "sourceNo": vị trí câu trong bản gốc đúng như in trên đề, vd "Phần II – Câu 1" (đề không chia phần thì "Câu 5").
 - "type": "mcq" = trắc nghiệm 4 phương án (Phần I); "tf" = đúng/sai 4 ý (Phần II); "short" = trả lời ngắn (Phần III).
 - "options": mcq là 4 phương án, BỎ chữ "A." "B."…; tf là 4 mệnh đề, BỎ "a)" "b)"…; short thì để [].
 - "answer": mcq là "A"/"B"/"C"/"D"; tf là 4 chữ Đ/S theo thứ tự a→d, vd "ĐĐSĐ"; short là số, dấu thập phân là dấu phẩy, vd "-1,5".
@@ -79,10 +90,13 @@ CÔNG THỨC:
 
 ${imageRules}
 
-ĐỀ THI ("exams"): một đề gồm mọi câu theo đúng thứ tự.
+THÔNG TIN ĐỀ ("exam"): lấy từ phần đầu đề; không có thì BỎ trường đó, không bịa.
 - "category": ${categories}.
+- "schoolYear": năm học dạng "2025-2026"; "grade": 10, 11 hoặc 12; "term": "HK1", "HK2" hoặc "CN".
+- "session": lần thi (vd "Lần 1", "Đợt 2"); "source": đơn vị ra đề (Bộ, Sở, trường); "date": ngày thi dạng "2026-03-15".
 - "durationMin": thời gian làm bài ghi trên đề.
-Nếu là TÀI LIỆU LÝ THUYẾT thay vì đề: để "questions": [] và "exams": [], điền "lessons":
+- "sections": các phần đúng như đề; mỗi phần liệt kê id các câu theo thứ tự. Đề không chia phần thì một phần duy nhất.
+Nếu là TÀI LIỆU LÝ THUYẾT thay vì đề: BỎ "exam", để "questions": [], điền "lessons":
 [{ "topic": "...", "summary": "...", "objectives": ["..."], "formulas": ["Tiêu đề: $...$"], "tips": "...",
    "traps": ["..."], "examples": [{ "title": "...", "problem": "...", "solution": "..." }] }] — mỗi chuyên đề một mục.
 
