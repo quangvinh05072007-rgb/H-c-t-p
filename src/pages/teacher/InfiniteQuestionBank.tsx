@@ -3,6 +3,7 @@ import { get, post } from '../../api';
 import { MathText } from '../../ui/MathText';
 import { go, Icon, Loading, Modal, topicName, useApp, useAsync } from '../../ui/kit';
 import { saveBuilderHandoff } from '../../utils/examHandoff';
+import { useCurriculum } from '../../ui/OutcomePicker';
 
 interface QuestionItem {
   id: number;
@@ -40,6 +41,7 @@ export function InfiniteQuestionBank({
   onDiscuss,
   onCreateExamFromIds,
   classId = null,
+  refreshKey = 0,
 }: {
   onEdit?: (q: QuestionItem) => void;
   onHistory?: (id: number) => void;
@@ -47,8 +49,12 @@ export function InfiniteQuestionBank({
   onCreateNew?: () => void;
   onCreateExamFromIds?: (ids: number[]) => void;
   classId?: number | null;
+  /** Đổi giá trị → tải lại danh sách (sau khi sửa/thêm câu). */
+  refreshKey?: number;
 }) {
   const { meta, toast, user } = useApp();
+  const curriculumAll = useCurriculum();
+  const outcomeText: Record<string, string> = Object.fromEntries((curriculumAll.data?.outcomes ?? []).map((o) => [o.code, o.text]));
   const isOwner = user?.role === 'admin';
   // Kho: '' tất cả · 'common' kho chung · 'mine' kho riêng của tôi · 'proposed' câu giáo viên đề xuất (chủ web)
   const [scope, setScope] = useState<string>('');
@@ -130,7 +136,7 @@ export function InfiniteQuestionBank({
 
   useEffect(() => {
     loadBatch(true);
-  }, [status, type, topic, form, grade, level, search, scope]);
+  }, [status, type, topic, form, grade, level, search, scope, refreshKey]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -510,6 +516,11 @@ export function InfiniteQuestionBank({
                   <span>· {LEVEL_LABEL[q.level] || `Mức ${q.level}`}</span>
                   <span>· {topicName(meta, q.topic)}</span>
                   {(q as any).form && <span className="su-chip">{(q as any).form}</span>}
+                  {((q as any).outcomes ?? []).slice(0, 3).map((code: string) => (
+                    <span key={code} className="su-chip" title={outcomeText[code] ? `YCCĐ ${code}: ${outcomeText[code]}` : `YCCĐ ${code} (không có trong chương trình đang dùng)`}>
+                      YCCĐ {code}
+                    </span>
+                  ))}
                   {(q as any).usedIn > 0 && (
                     <button type="button" className="su-chip" style={{ cursor: 'pointer', border: 0 }} onClick={(ev) => { ev.stopPropagation(); setUsageOf(q.id); }} title="Xem câu này nằm trong những đề nào">
                       Trong {(q as any).usedIn} đề

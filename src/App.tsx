@@ -3,6 +3,7 @@ import {
   BarChart3,
   LineChart,
   BookOpen,
+  ListChecks,
   BookmarkCheck,
   ChevronRight,
   ClipboardList,
@@ -53,6 +54,7 @@ import { MistakeNotebook } from './pages/student/MistakeNotebook';
 import { EndlessPracticeStream } from './pages/student/EndlessPracticeStream';
 import { AdminHome, Audit, Users } from './pages/admin/Admin';
 import { LessonAdmin } from './pages/admin/Lessons';
+import { CurriculumAdmin } from './pages/admin/Curriculum';
 import { PeriodicReports } from './pages/teacher/PeriodicReports';
 import { Family } from './pages/Family';
 import { InstallApp } from './ui/InstallApp';
@@ -340,6 +342,7 @@ export function App() {
           ['/nguoi-dung', () => <Users />],
           ['/nhat-ky', () => <Audit />],
           ['/bai-tu-hoc', () => (user.role === 'admin' ? <LessonAdmin /> : <Classes />)],
+          ['/chuong-trinh', () => (user.role === 'admin' ? <CurriculumAdmin /> : <Classes />)],
           ['/tien-bo', () => <Classes />],
           ['/tai-khoan', () => <Account onLogout={logout} />],
         ];
@@ -425,6 +428,7 @@ export function App() {
     ...(user.role === 'admin'
       ? [
           { path: '/nguoi-dung', label: 'Quản lý người dùng', icon: UsersIcon },
+          { path: '/chuong-trinh', label: 'Chương trình chuẩn', icon: ListChecks },
           { path: '/bai-tu-hoc', label: 'Bài tự học', icon: BookOpen },
           { path: '/nhat-ky', label: 'Nhật ký hệ thống', icon: ScrollText },
           { path: '/bao-cao', label: 'Báo cáo toàn trường', icon: BarChart3 },
@@ -474,6 +478,7 @@ export function App() {
     if (user.role === 'admin') {
       items.push(
         { title: 'Quản lý người dùng', desc: 'Phân quyền giáo viên & học sinh', path: '/nguoi-dung', icon: UsersIcon },
+        { title: 'Chương trình chuẩn', desc: 'Yêu cầu cần đạt theo lớp, chuyên đề; độ phủ ngân hàng', path: '/chuong-trinh', icon: ListChecks },
         { title: 'Bài tự học', desc: 'Lý thuyết tự học: bài đang dùng, lịch sử, khôi phục', path: '/bai-tu-hoc', icon: BookOpen },
         { title: 'Nhật ký hệ thống', desc: 'Theo dõi hoạt động bảo mật', path: '/nhat-ky', icon: ScrollText },
         { title: 'Báo cáo toàn trường', desc: 'Thống kê kết quả thi', path: '/bao-cao', icon: BarChart3 },

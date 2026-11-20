@@ -2,14 +2,16 @@
 // App không gọi AI: chỉ soạn sẵn văn bản này (kèm mã chuyên đề và dạng toán của trường) để giáo viên sao chép.
 import { TOPICS } from './topics.mjs';
 import { EXAM_CATEGORIES } from './examCategory.mjs';
+import { COMPETENCIES, STRANDS } from './curriculum.mjs';
 
 /**
- * @param {{ mode?: 'text' | 'code', forms?: Record<string, string[]> }} opts
+ * @param {{ mode?: 'text' | 'code', forms?: Record<string, string[]>, outcomes?: Record<string, {code: string, text: string}[]> }} opts
  *   mode "text": AI chỉ trả về JSON (dùng được với mọi AI, kể cả bản miễn phí).
  *   mode "code": AI có công cụ chạy code (ChatGPT phân tích dữ liệu, Claude tạo file…) → trả về goi.zip có sẵn hình.
  *   forms: dạng toán đang có trong ngân hàng, theo mã chuyên đề, để AI dùng đúng tên cũ.
+ *   outcomes: yêu cầu cần đạt của chương trình đã công bố, theo mã chuyên đề, để AI gắn mã YCCĐ cho từng câu.
  */
-export function buildAiPrompt({ mode = 'text', forms = {} } = {}) {
+export function buildAiPrompt({ mode = 'text', forms = {}, outcomes = {} } = {}) {
   const topicLines = [10, 11, 12]
     .map((g) => `Lớp ${g}: ` + TOPICS.filter((t) => t.grade === g).map((t) => `${t.code} ${t.name}`).join(' · '))
     .join('\n');
@@ -19,6 +21,12 @@ export function buildAiPrompt({ mode = 'text', forms = {} } = {}) {
       formEntries.map(([code, list]) => `${code}: ${list.join(' | ')}`).join('\n')
     : 'DẠNG TOÁN: đặt tên ngắn gọn, thống nhất (vd "Tích phân từng phần", "Khoảng cách từ điểm đến mặt phẳng").';
   const categories = EXAM_CATEGORIES.map((c) => `"${c.code}" ${c.label}`).join(' · ');
+  const outcomeEntries = Object.entries(outcomes).filter(([, list]) => list?.length);
+  const short = (s) => (s.length > 110 ? s.slice(0, 107) + '…' : s);
+  const outcomeBlock = outcomeEntries.length
+    ? `\nYÊU CẦU CẦN ĐẠT (YCCĐ) — thêm vào mỗi câu "outcomes": ["mã", …] gồm 1–2 mã YCCĐ mà câu đó kiểm tra, CHỈ chọn trong danh sách của đúng chuyên đề; không chắc thì để []:\n` +
+      outcomeEntries.map(([code, list]) => `${code}:\n` + list.map((o) => `  ${o.code} ${short(o.text)}`).join('\n')).join('\n') + '\n'
+    : '';
 
   const imageRules =
     mode === 'code'
@@ -104,10 +112,55 @@ MÃ CHUYÊN ĐỀ:
 ${topicLines}
 
 ${formBlock}
-
+${outcomeBlock}
 TRƯỚC KHI TRẢ LỜI, TỰ KIỂM TRA: số câu đúng như bản gốc; mỗi mcq/tf có đủ 4 lựa chọn; mỗi câu có answer;
 mọi dấu \\ trong chuỗi JSON đã viết thành \\\\; JSON đọc được.
 
 ĐÁP ÁN CỦA ĐỀ (nếu có, dán vào đây hoặc nằm trong file gửi kèm):
+`;
+}
+
+/** Lời nhắc để chủ web dán vào AI bên ngoài khi chuyển VĂN BẢN CHƯƠNG TRÌNH chính thức (bảng yêu cầu cần đạt) thành gói. */
+export function buildCurriculumPrompt() {
+  const topicLines = [10, 11, 12]
+    .map((g) => `Lớp ${g}: ` + TOPICS.filter((t) => t.grade === g).map((t) => `${t.code} ${t.name}`).join(' · '))
+    .join('\n');
+  return `Bạn chuyển văn bản CHƯƠNG TRÌNH MÔN TOÁN (GDPT 2018, cấp THPT, lớp 10–12) tôi gửi kèm thành dữ liệu để nhập vào phần mềm SmartExam.
+CHỈ CHÉP LẠI: mỗi yêu cầu cần đạt (YCCĐ) giữ NGUYÊN VĂN như văn bản, không tóm tắt, không sửa câu chữ, không thêm YCCĐ không có trong văn bản.
+Phần nào văn bản không có (vd năng lực của từng YCCĐ) thì để trống, không đoán.
+
+ĐẦU RA: đúng MỘT đối tượng JSON hợp lệ, không có chữ nào khác trước hay sau, không bọc trong \`\`\`.
+
+{
+  "format": "smartexam-package",
+  "version": 2,
+  "source": "Chương trình môn Toán GDPT 2018",
+  "curriculum": {
+    "name": "Chương trình môn Toán GDPT 2018 – THPT",
+    "sourceDoc": "Số hiệu văn bản ban hành, như ghi trên văn bản",
+    "outcomes": [
+      { "code": "10.DS.1.1", "grade": 10, "topic": "T10.MENHDE", "strand": "DS",
+        "content": "Tên nội dung trong bảng (cột Nội dung)", "text": "Nguyên văn yêu cầu cần đạt", "competencies": [] }
+    ]
+  }
+}
+
+MỖI YCCĐ:
+- "text": nguyên văn MỘT gạch đầu dòng của cột "Yêu cầu cần đạt". Mỗi gạch đầu dòng là một YCCĐ riêng.
+- "content": tên nội dung (cột "Nội dung") mà YCCĐ đó thuộc về.
+- "grade": 10, 11 hoặc 12 theo lớp của bảng.
+- "strand": mạch kiến thức — ${STRANDS.map((s) => `"${s.code}" ${s.name}`).join(' · ')}. Nếu là chuyên đề học tập tự chọn hoặc không rõ thì để "".
+- "topic": mã chuyên đề của phần mềm gần nhất với nội dung, CHỈ dùng mã trong bảng MÃ CHUYÊN ĐỀ, đúng lớp.
+- "code": <lớp>.<mạch>.<số thứ tự nội dung trong mạch của lớp đó>.<số thứ tự YCCĐ trong nội dung>, vd "10.DS.1.1", "11.HH.2.3".
+  Mã không được trùng. Giữ đúng thứ tự như văn bản.
+- "competencies": chỉ điền khi văn bản ghi rõ; mã năng lực — ${COMPETENCIES.map((c) => `"${c.code}" ${c.name}`).join(' · ')}.
+
+CÔNG THỨC trong YCCĐ: đặt trong $...$, và trong JSON mỗi dấu \\ viết HAI lần (vd "$\\\\sqrt{x}$").
+
+MÃ CHUYÊN ĐỀ:
+${topicLines}
+
+TRƯỚC KHI TRẢ LỜI, TỰ KIỂM TRA: số YCCĐ đúng bằng số gạch đầu dòng trong văn bản; không có mã trùng; mọi "topic" đúng lớp; JSON đọc được.
+Nếu văn bản quá dài, làm từng lớp một (lớp 10 trước) và nói rõ còn lớp nào chưa làm.
 `;
 }

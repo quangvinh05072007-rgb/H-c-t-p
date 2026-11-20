@@ -23,6 +23,7 @@ import { get, post } from '../../api';
 import { TOPIC_CURRICULUM, TopicCurriculumEntry } from '../../data/topicCurriculum';
 import { fmtDateTime, go, Loading, useApp, useAsync } from '../../ui/kit';
 import { MathText } from '../../ui/MathText';
+import { useCurriculum } from '../../ui/OutcomePicker';
 import { isAnswered, Item, QuestionView, Review } from '../../ui/Question';
 import {
   getStudyStatusMeta,
@@ -127,6 +128,9 @@ export function TopicStudyWorkspace({
   const { data: lessonData } = useAsync(() => get<{ lessons: Record<string, CurriculumWithExamples> }>('/api/lessons').catch(() => ({ lessons: {} as Record<string, CurriculumWithExamples> })), []);
   const curriculum = (lessonData?.lessons?.[topic.code] ?? TOPIC_CURRICULUM[topic.code]) as CurriculumWithExamples | undefined;
   const hasExamples = Boolean(curriculum?.examples && curriculum.examples.length > 0);
+  // Yêu cầu cần đạt của chương trình chuẩn đã công bố (chủ web nhập)
+  const { data: standard } = useCurriculum(isBankTopic ? topic.code : null);
+  const standardOutcomes = standard?.curriculum ? standard.outcomes : [];
 
   useEffect(() => {
     setStageTab('theory');
@@ -312,8 +316,16 @@ export function TopicStudyWorkspace({
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <Target size={17} color="var(--ss-primary)" style={{ marginTop: 2, flexShrink: 0 }} aria-hidden="true" />
               <div>
-                <strong>Mục tiêu học tập:</strong>{' '}
-                {curriculum?.objectives?.length ? (
+                <strong>{standardOutcomes.length ? 'Yêu cầu cần đạt:' : 'Mục tiêu học tập:'}</strong>{' '}
+                {standardOutcomes.length ? (
+                  <ul className="ss-outcomes">
+                    {standardOutcomes.map((o) => (
+                      <li key={o.code}>
+                        <MathText text={o.text} />
+                      </li>
+                    ))}
+                  </ul>
+                ) : curriculum?.objectives?.length ? (
                   <span>{curriculum.objectives.join(' · ')}</span>
                 ) : (
                   <span>

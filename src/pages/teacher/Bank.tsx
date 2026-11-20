@@ -4,6 +4,7 @@ import { download, get, post, put } from '../../api';
 import { MathText } from '../../ui/MathText';
 import { PageHeading, ErrorBox, Icon, LevelBadge, Loading, Modal, SourceBadge, topicName, TypeBadge, useApp, useAsync, useRoute, go } from '../../ui/kit';
 import { Draft, QuestionEditor } from '../../ui/QuestionEditor';
+import { OutcomePicker } from '../../ui/OutcomePicker';
 import { Comments } from '../../ui/Comments';
 import { QuestionHistory } from '../../ui/QuestionHistory';
 import { InfiniteQuestionBank } from './InfiniteQuestionBank';
@@ -72,6 +73,7 @@ export function Bank() {
   const { data, error, loading, reload } = useAsync(() => get(`/api/questions?${qs}`), [qs]);
   const [sel, setSel] = useState<number[]>([]);
   const [editing, setEditing] = useState<any | null>(null);
+  const [listKey, setListKey] = useState(0);
   // Mở thẳng trình sửa khi đến từ trang Câu cần sửa (?edit=ID)
   const editId = query.get('edit');
   useEffect(() => {
@@ -168,6 +170,7 @@ export function Bank() {
       setEditing(null);
       toast('Đã lưu câu hỏi.');
       reload();
+      setListKey((k) => k + 1);
     } catch (e: any) {
       toast(e.message);
     }
@@ -179,6 +182,7 @@ export function Bank() {
       setEditing(null);
       toast('Đã thêm câu nháp. Duyệt để dùng trong đề.');
       reload();
+      setListKey((k) => k + 1);
     } catch (e: any) {
       toast(e.message);
     }
@@ -206,6 +210,7 @@ export function Bank() {
       {viewMode === 'infinite' ? (
         <InfiniteQuestionBank
           onEdit={(q) => setEditing(q)}
+          refreshKey={listKey}
           onHistory={(id) => setHistory(id)}
           onDiscuss={(id) => setDiscussion(id)}
           onCreateNew={create}
@@ -393,6 +398,7 @@ export function Bank() {
       {editing && (
         <Modal title={editing.id ? `Sửa câu #${editing.id}` : 'Thêm câu hỏi'} onClose={() => setEditing(null)}>
           <QuestionEditor q={editing as Draft} onChange={(q) => setEditing({ ...editing, ...q })} />
+          <OutcomePicker topic={editing.topic} value={editing.outcomes ?? []} onChange={(outcomes) => setEditing({ ...editing, outcomes })} />
           {editing.id && <label className="field mt">Lý do sửa / ghi chú phiên bản<input className="input" value={editReason} maxLength={300} onChange={e => setEditReason(e.target.value)} placeholder="Bắt buộc khi đổi đáp án câu đã dùng" /></label>}
           {editing.status === 'approved' && <p className="tiny muted mt">Câu đã duyệt: thay đổi áp dụng cho đề mới. Đề đã tạo giữ bản cũ.</p>}
           <div className="row between mt">

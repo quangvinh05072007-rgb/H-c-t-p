@@ -38,6 +38,7 @@ import JSZip from 'jszip';
 import { makeRng } from '../shared/rng.mjs';
 import { parsePackage, bindImages, samplePackage } from '../shared/package.mjs';
 import { exportMatrixDocx } from '../shared/exportMatrixDocx.mjs';
+import { registerCurriculum } from './curriculum.mjs';
 
 export const SAVE_GRACE_MS = 30 * 1000; // ân hạn mạng sau giờ nộp
 export const LATE_WINDOW_MS = 15 * 60 * 1000; // nhận bản đồng bộ muộn (mất mạng) để giáo viên quyết định
@@ -693,6 +694,7 @@ export function createApp(config = {}) {
   };
   const reports = registerReports({ route, db, now, fail, audit, teacherClassIds, sweepExpired, saveGraceMs: SAVE_GRACE_MS });
   registerFamily({ route, db, now, fail, audit, teacherClassIds, sweepExpired });
+  const curriculum = registerCurriculum({ route, db, now, fail, audit });
 
   // ---- phiên ----
   route('POST', '/api/login', null, async ({ req, body, ip, setCookie }) => {
@@ -825,6 +827,7 @@ export function createApp(config = {}) {
     if (query.type) (where.push('type = ?'), p.push(query.type));
     if (query.topic) (where.push('topic = ?'), p.push(query.topic));
     if (query.form) (where.push('form = ?'), p.push(String(query.form)));
+    if (query.outcome) (where.push('id IN (SELECT qid FROM question_outcomes WHERE code = ?)'), p.push(String(query.outcome)));
     if (query.source) (where.push('source = ?'), p.push(query.source));
     if (query.level) (where.push('level = ?'), p.push(Number(query.level)));
     if (query.grade) {
@@ -862,8 +865,9 @@ export function createApp(config = {}) {
           ...rows.map((q) => q.id),
         ).map((r) => [r.qid, r.n]))
       : {};
+    const outcomeCodes = curriculum.codesOfQuestions(rows.map((q) => q.id));
     return {
-      questions: rows.map((q) => ({ ...q, usedIn: usedIn[q.id] ?? 0, stats: um[q.id] ? { n: um[q.id].n, p: Math.round(um[q.id].p * 100) / 100 } : null, problems: validateQuestion(q) })),
+      questions: rows.map((q) => ({ ...q, outcomes: outcomeCodes[q.id] ?? [], usedIn: usedIn[q.id] ?? 0, stats: um[q.id] ? { n: um[q.id].n, p: Math.round(um[q.id].p * 100) / 100 } : null, problems: validateQuestion(q) })),
       counts: Object.fromEntries(counts.map((c) => [c.status, c.n])),
       total,
       hasMore: offset + rows.length < total,
@@ -917,7 +921,9 @@ export function createApp(config = {}) {
     if (!QUESTION_TYPES[body.type]) fail(400, 'Chọn loại câu: trắc nghiệm, đúng/sai hoặc trả lời ngắn.');
     const canAutoApprove = body.autoApprove === true && reviewPolicy(user.school_id) !== 'double' && validateQuestion(body).length === 0;
     const status = canAutoApprove ? 'approved' : 'draft';
+    const outcomeCodes = body.outcomes !== undefined ? curriculum.checkCodes(user.school_id, body.outcomes) : [];
     const id = insertQuestion(user, body, 'teacher', status);
+    if (outcomeCodes.length) curriculum.setQuestionOutcomes(id, outcomeCodes);
     audit(user, 'question_create', `#${id}${canAutoApprove ? ' (duyệt ngay)' : ''}`, ip);
     const created = toQuestion(db.get('SELECT * FROM questions WHERE id = ?', id));
     return { id, question: created };
@@ -961,6 +967,7 @@ export function createApp(config = {}) {
     if (!q || !canSeeQuestion(user, q)) fail(404, 'Không tìm thấy câu hỏi.');
     if (q.scope === 'common' && user.role !== 'admin') deny(user, 'question_edit', `question:${q.id}`, 'Câu trong kho chung chỉ chủ web sửa được. Hãy sao chép về kho riêng nếu cần chỉnh.', ip);
     if (q.scope === 'private' && !canManageQuestion(user, q)) deny(user, 'question_edit', `question:${q.id}`, 'Chỉ người tạo câu mới sửa được.', ip);
+    const outcomeCodes = Object.prototype.hasOwnProperty.call(body ?? {}, 'outcomes') ? curriculum.checkCodes(user.school_id, body.outcomes, curriculum.codesOfQuestions([q.id])[q.id] ?? []) : null;
     if (Object.prototype.hasOwnProperty.call(body ?? {}, 'form')) db.run('UPDATE questions SET form = ? WHERE id = ?', cleanForm(body.form), q.id);
     const EDITABLE_FIELDS = ['type', 'stem', 'options', 'answer', 'explanation', 'topic', 'level', 'distractors', 'group_id', 'ocrText', 'sourceStem'];
     const patch = {};
@@ -1005,8 +1012,9 @@ export function createApp(config = {}) {
     }
     if (sensitive) audit(user, 'question_answer_change', `#${q.id}`, ip, { target: `question:${q.id}`, old: { answer: toQuestion(q).answer }, new: { answer: merged.answer }, reason });
     else audit(user, 'question_edit', `#${q.id}`, ip, { target: `question:${q.id}` });
+    if (outcomeCodes) curriculum.setQuestionOutcomes(q.id, outcomeCodes);
     invalidateQuestionIndex(user.school_id);
-    return { question: toQuestion(db.get('SELECT * FROM questions WHERE id = ?', q.id)) };
+    return { question: { ...toQuestion(db.get('SELECT * FROM questions WHERE id = ?', q.id)), outcomes: curriculum.codesOfQuestions([q.id])[q.id] ?? [] } };
   });
   // Chính sách duyệt: 'single' (một người duyệt là xong) hoặc 'double' (cần hai người khác nhau, trong đó có người không phải tác giả).
   route('POST', '/api/questions/approve', STAFF, ({ user, body, ip }) => {
@@ -1327,6 +1335,9 @@ export function createApp(config = {}) {
       byType: p.questions.reduce((acc, q) => ((acc[q.type] = (acc[q.type] ?? 0) + 1), acc), {}),
       exams: p.exams.map((e) => ({ title: e.title, count: e.keys.length, durationMin: e.durationMin })),
       lessons: p.lessons.map((l) => ({ topic: l.topic, name: TOPIC_BY_CODE[l.topic]?.name ?? l.topic })),
+      curriculum: p.curriculum
+        ? { name: p.curriculum.name, sourceDoc: p.curriculum.sourceDoc, outcomes: p.curriculum.outcomes.length, byGrade: p.curriculum.outcomes.reduce((acc, o) => ((acc[o.grade] = (acc[o.grade] ?? 0) + 1), acc), {}) }
+        : null,
       errors: p.errors,
       warnings: p.warnings,
     };
@@ -1339,7 +1350,7 @@ export function createApp(config = {}) {
     );
     const forms = {};
     for (const r of rows) if ((forms[r.topic] ??= []).length < 15) forms[r.topic].push(r.form);
-    return { text: buildAiPrompt({ mode: query.mode === 'code' ? 'code' : 'text', forms }) };
+    return { text: buildAiPrompt({ mode: query.mode === 'code' ? 'code' : 'text', forms, outcomes: curriculum.promptOutcomes(user.school_id) }) };
   });
   route('GET', '/api/import/package-sample.json', STAFF, () => ({
     __file: { name: 'goi-nhap-mau.json', type: 'application/json; charset=utf-8', data: Buffer.from(JSON.stringify(samplePackage(), null, 2), 'utf8') },
@@ -1380,6 +1391,15 @@ export function createApp(config = {}) {
       p.warnings.push(`Bài tự học do chủ web nhập: bỏ qua ${p.lessons.length} bài học trong gói.`);
       p.lessons = [];
     }
+    // Chương trình chuẩn cũng chỉ chủ web nhập
+    const droppedCurriculum = user.role !== 'admin' && Boolean(p.curriculum);
+    if (droppedCurriculum) {
+      p.warnings.push('Chương trình chuẩn do chủ web nhập: bỏ qua phần "curriculum" trong gói.');
+      p.curriculum = null;
+    }
+    p.curriculum ??= null;
+    // Mã YCCĐ của câu: chỉ giữ mã có trong chương trình của trường (hoặc chương trình nhập cùng gói)
+    p.warnings.push(...curriculum.filterPackageOutcomes(user.school_id, p.questions, p.curriculum?.outcomes.map((o) => o.code) ?? []));
     p.warnings.unshift(...notes);
     const dryRun = query.dryRun === '1' || query.dryRun === 'true';
     if (dryRun) {
@@ -1411,7 +1431,10 @@ export function createApp(config = {}) {
       }));
       return { dryRun: true, ...packageSummary(p), duplicates, preview, imageData, missingImages, original: original ? { name: original.name, size: original.data.length } : null };
     }
-    if (!p.questions.length && !p.lessons.length) fail(400, p.errors[0]?.message ?? (droppedLessons ? 'Bài tự học do chủ web nhập; gói này không có câu hỏi nào để nhập.' : 'Gói không có mục hợp lệ để nhập.'));
+    if (!p.questions.length && !p.lessons.length && !p.curriculum) {
+      const owned = [droppedLessons && 'bài tự học', droppedCurriculum && 'chương trình chuẩn'].filter(Boolean).join(' và ');
+      fail(400, p.errors[0]?.message ?? (owned ? `${owned[0].toUpperCase()}${owned.slice(1)} do chủ web nhập; gói này không có câu hỏi nào để nhập.` : 'Gói không có mục hợp lệ để nhập.'));
+    }
 
     const wantApprove = query.approve === '1' || query.approve === 'true';
     const canApprove = wantApprove && reviewPolicy(user.school_id) !== 'double';
@@ -1421,6 +1444,8 @@ export function createApp(config = {}) {
 
     const result = db.tx(() => {
       const documentId = original ? saveDocument(user, original) : null;
+      // Chương trình chuẩn → một phiên bản nháp, chủ web xem rồi công bố ở trang Chương trình
+      const curriculumId = p.curriculum ? curriculum.importCurriculum(user, p.curriculum, origin) : null;
       // Hình: chỉ lưu hình được nhắc tới
       const used = new Set();
       const collect = (s) => { for (const m of String(s ?? '').matchAll(/\[\[image:([^\]\n]+)\]\]/g)) used.add(m[1].trim()); };
@@ -1456,6 +1481,7 @@ export function createApp(config = {}) {
         idByKey[q.key] = id;
         if (q.sourceNo) db.run('UPDATE questions SET source_no = ? WHERE id = ?', q.sourceNo, id);
         if (documentId) db.run('UPDATE questions SET document_id = ? WHERE id = ?', documentId, id);
+        if (q.outcomes?.length) curriculum.setQuestionOutcomes(id, q.outcomes);
         if (status === 'approved') approved++; else drafts++;
       }
 
@@ -1493,10 +1519,10 @@ export function createApp(config = {}) {
           user.school_id, l.topic, JSON.stringify(entry), origin, user.id, now(),
         );
       }
-      return { approved, drafts, skipped, exams, lessons: p.lessons.length, images: Object.keys(idByName).length };
+      return { approved, drafts, skipped, exams, lessons: p.lessons.length, images: Object.keys(idByName).length, curriculum: curriculumId ? { id: curriculumId, outcomes: p.curriculum.outcomes.length } : null };
     });
     invalidateQuestionIndex(user.school_id);
-    audit(user, 'import_package', `${origin}: ${result.approved + result.drafts} câu mới, ${result.skipped} trùng, ${result.exams.length} đề, ${result.lessons} bài học`, ip);
+    audit(user, 'import_package', `${origin}: ${result.approved + result.drafts} câu mới, ${result.skipped} trùng, ${result.exams.length} đề, ${result.lessons} bài học${result.curriculum ? `, chương trình ${result.curriculum.outcomes} YCCĐ (nháp)` : ''}`, ip);
     return { ...result, errors: p.errors, warnings };
   });
   // Bài học Tự học đã nhập (ghi đè nội dung mặc định theo chuyên đề)
@@ -3298,7 +3324,7 @@ export function createApp(config = {}) {
   route('GET', '/api/questions/:id', STAFF, ({ user, params }) => {
     const row = db.get('SELECT * FROM questions WHERE id = ? AND school_id = ?', params.id, user.school_id);
     if (!row) fail(404, 'Không tìm thấy câu hỏi.');
-    return { question: toQuestion(row) };
+    return { question: { ...toQuestion(row), outcomes: curriculum.codesOfQuestions([row.id])[row.id] ?? [] } };
   });
   // ---- khiếu nại điểm ----
   const APPEAL_DAYS = 14;

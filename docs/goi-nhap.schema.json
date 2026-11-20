@@ -129,6 +129,15 @@
             "type": "string",
             "maxLength": 60,
             "description": "Vị trí câu trong đề gốc, vd \"Phần II – Câu 1\""
+          },
+          "outcomes": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$"
+            },
+            "description": "Mã yêu cầu cần đạt (YCCĐ) câu này kiểm tra; phải có trong chương trình chuẩn của trường"
           }
         },
         "allOf": [
@@ -450,6 +459,76 @@
         }
       },
       "description": "Bản 2: một đề kèm thông tin đề; thứ tự câu theo sections"
+    },
+    "curriculum": {
+      "type": "object",
+      "description": "Chương trình chuẩn (YCCĐ). Chỉ chủ web nhập; lưu thành bản nháp, công bố ở trang Chương trình chuẩn.",
+      "required": [
+        "name",
+        "outcomes"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "sourceDoc": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "outcomes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1500,
+          "items": {
+            "type": "object",
+            "required": [
+              "code",
+              "topic",
+              "text"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$"
+              },
+              "grade": {
+                "enum": [
+                  10,
+                  11,
+                  12
+                ]
+              },
+              "topic": {
+                "type": "string"
+              },
+              "strand": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1500
+              },
+              "competencies": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

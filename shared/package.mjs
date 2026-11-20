@@ -6,6 +6,7 @@ import { cleanCategory, EXAM_CATEGORY_CODES } from './examCategory.mjs';
 import { cleanExamMeta } from './examMeta.mjs';
 import { TOPIC_BY_CODE } from './topics.mjs';
 import { repairPackageText, restoreControlChars } from './packageRepair.mjs';
+import { cleanOutcomeCodes, parseCurriculum } from './curriculum.mjs';
 
 export const PACKAGE_FORMAT = 'smartexam-package';
 export const PACKAGE_VERSION = 1;
@@ -52,7 +53,8 @@ export function imageRefs(s) {
 
 /**
  * Đọc và kiểm tra gói. imageNames: tập tên file hình có trong ZIP (rỗng nếu chỉ có JSON).
- * Trả về { source, questions, exams, lessons, errors, warnings } — errors là lỗi chặn từng mục, mục lỗi bị bỏ qua.
+ * Trả về { source, questions, exams, lessons, curriculum, errors, warnings } — errors là lỗi chặn từng mục, mục lỗi bị bỏ qua.
+ * curriculum: chương trình chuẩn (YCCĐ) nếu gói có mục "curriculum", không thì null.
  */
 export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
   const errors = [];
@@ -84,7 +86,8 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
     : null;
   const rawExams = [...(Array.isArray(pkg.exams) ? pkg.exams : []), ...(v2Exam ? [v2Exam] : [])];
   const rawLessons = Array.isArray(pkg.lessons) ? pkg.lessons : [];
-  if (!rawQs.length && !rawLessons.length) errors.push({ where: 'Gói', message: 'Gói không có câu hỏi hay bài học nào.' });
+  const hasCurriculum = pkg.curriculum !== undefined && pkg.curriculum !== null;
+  if (!rawQs.length && !rawLessons.length && !hasCurriculum) errors.push({ where: 'Gói', message: 'Gói không có câu hỏi, bài học hay chương trình nào.' });
   if (rawQs.length > PACKAGE_LIMITS.questions) errors.push({ where: 'Gói', message: `Tối đa ${PACKAGE_LIMITS.questions} câu mỗi gói.` });
   if (rawExams.length > PACKAGE_LIMITS.exams) errors.push({ where: 'Gói', message: `Tối đa ${PACKAGE_LIMITS.exams} đề mỗi gói.` });
   if (rawLessons.length > PACKAGE_LIMITS.lessons) errors.push({ where: 'Gói', message: `Tối đa ${PACKAGE_LIMITS.lessons} bài học mỗi gói.` });
@@ -149,6 +152,7 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
       group_id: text(q.group) ? text(q.group).slice(0, 40) : null,
       form: text(q.form).slice(0, 60) || null,
       sourceNo: text(q.sourceNo).slice(0, 60) || null,
+      outcomes: cleanOutcomeCodes(q.outcomes),
       needsReview,
     });
   });
@@ -211,6 +215,15 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
     lessons.push({ topic, entry });
   });
 
+  // ---- Chương trình chuẩn (YCCĐ) ----
+  let curriculum = null;
+  if (hasCurriculum) {
+    const c = parseCurriculum(pkg.curriculum);
+    errors.push(...c.errors);
+    warnings.push(...c.warnings);
+    curriculum = c.value;
+  }
+
   if (labelFixes) warnings.push(`Đã bỏ nhãn "A." / "a)" thừa ở phương án của ${labelFixes} câu.`);
   if (controlFixes) warnings.push(`Đã khôi phục ${controlFixes} lệnh công thức bị hỏng do thiếu dấu \\.`);
   const aiSolved = questions.filter((q) => q.needsReview).length;
@@ -218,7 +231,7 @@ export function parsePackage(raw, imageNames = new Set(), rejectedImages = {}) {
   if (!imageNames.size && [...questions, ...lessons].length && rawQs.concat(rawLessons).some((x) => JSON.stringify(x ?? '').includes('[[image:'))) {
     warnings.push('Gói có chỗ đặt hình nhưng chưa kèm hình: đính kèm file Word gốc để app tự lấy hình, hoặc dán ảnh chụp vào từng hình còn thiếu.');
   }
-  return { source, questions, exams, lessons, errors, warnings };
+  return { source, questions, exams, lessons, curriculum, errors, warnings };
 }
 
 /** Thay [[image:ten]] bằng [[img:id]] sau khi đã lưu hình. */

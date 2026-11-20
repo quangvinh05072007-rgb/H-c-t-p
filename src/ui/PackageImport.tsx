@@ -24,6 +24,7 @@ type Summary = {
   byType: Record<string, number>;
   exams: { title: string; count: number; durationMin: number }[];
   lessons: { topic: string; name: string }[];
+  curriculum?: { name: string; sourceDoc: string; outcomes: number; byGrade: Record<string, number> } | null;
   errors: { where: string; message: string }[];
   warnings: string[];
   duplicates?: { key: string; id: number; score: number; exact: boolean }[];
@@ -39,6 +40,7 @@ type Done = {
   exams: { id: number; title: string }[];
   lessons: number;
   images: number;
+  curriculum?: { id: number; outcomes: number } | null;
   errors: { where: string; message: string }[];
   warnings: string[];
 };
@@ -170,7 +172,7 @@ export function PackageImport() {
       const r: Done = await send(false);
       setDone(r);
       setSummary(null);
-      toast(`Đã nhập ${r.approved + r.drafts} câu, ${r.exams.length} đề, ${r.lessons} bài học.`);
+      toast(r.curriculum ? `Đã nhập chương trình (${r.curriculum.outcomes} YCCĐ) dạng nháp. Vào trang Chương trình để xem và công bố.` : `Đã nhập ${r.approved + r.drafts} câu, ${r.exams.length} đề, ${r.lessons} bài học.`);
     } catch (e: any) {
       toast(e.message || 'Nhập gói thất bại.');
     } finally {
@@ -212,7 +214,7 @@ export function PackageImport() {
     if (attachInput.current) attachInput.current.value = '';
   };
 
-  const nothingValid = summary && summary.questions === 0 && summary.lessons.length === 0;
+  const nothingValid = summary && summary.questions === 0 && summary.lessons.length === 0 && !summary.curriculum;
   const missing = (summary?.missingImages ?? []).filter((n) => !images[n]);
   const aiSolved = (summary?.preview ?? []).filter((q) => q.needsReview).length;
 
@@ -334,6 +336,11 @@ export function PackageImport() {
             <div className="su-row-meta" style={{ padding: '4px 0' }}>Đề: {summary.exams.map((e) => `${e.title} (${e.count} câu, ${e.durationMin} phút)`).join(' · ')}</div>
           )}
           {summary.lessons.length > 0 && <div className="su-row-meta" style={{ padding: '4px 0' }}>Bài học: {summary.lessons.map((l) => l.name).join(' · ')}</div>}
+          {summary.curriculum && (
+            <div className="su-row-meta" style={{ padding: '4px 0' }}>
+              Chương trình: <b>{summary.curriculum.name}</b> — {summary.curriculum.outcomes} YCCĐ ({Object.entries(summary.curriculum.byGrade).map(([g, n]) => `lớp ${g}: ${n}`).join(', ')}). Lưu thành bản nháp, công bố ở trang Chương trình.
+            </div>
+          )}
 
           {summary.original && (
             <div className="su-row-meta" style={{ padding: '4px 0' }}>
@@ -474,6 +481,12 @@ export function PackageImport() {
                 <span>· {done.exams.length} đề</span>
                 <span>· {done.lessons} bài học</span>
                 {done.images > 0 && <span>· {done.images} hình</span>}
+                {done.curriculum && (
+                  <span>
+                    · chương trình {done.curriculum.outcomes} YCCĐ (nháp) —{' '}
+                    <a href="#/chuong-trinh">xem và công bố</a>
+                  </span>
+                )}
               </div>
             </div>
           </div>

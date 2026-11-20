@@ -239,6 +239,19 @@ export function migrate(db) {
       DELETE FROM exam_items WHERE exam_id = OLD.id; DELETE FROM exam_variants WHERE exam_id = OLD.id; END;`);
   // Thư mục riêng của từng giáo viên để xếp đề (một đề có thể nằm trong nhiều thư mục của nhiều người)
   // Lịch sử bài tự học: mỗi lần chủ web nhập lại / khôi phục / về mặc định, bản đang dùng được cất vào đây
+  // Kho chương trình chuẩn: mỗi lần nhập là một phiên bản (nháp → công bố → lưu trữ); chỉ một bản công bố.
+  // Câu hỏi gắn với YCCĐ theo MÃ, nên đổi sang phiên bản mới giữ mã cũ thì liên kết vẫn còn.
+  db.exec(`CREATE TABLE IF NOT EXISTS curricula (
+      id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, name TEXT NOT NULL, source_doc TEXT, note TEXT,
+      status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published','archived')),
+      origin TEXT, created_by INTEGER, created_at INTEGER NOT NULL, published_by INTEGER, published_at INTEGER);
+    CREATE TABLE IF NOT EXISTS curriculum_outcomes (
+      id INTEGER PRIMARY KEY, curriculum_id INTEGER NOT NULL, pos INTEGER NOT NULL, code TEXT NOT NULL,
+      grade INTEGER NOT NULL, topic TEXT NOT NULL, strand TEXT, content TEXT, text TEXT NOT NULL, competencies_json TEXT NOT NULL DEFAULT '[]',
+      UNIQUE (curriculum_id, code));
+    CREATE INDEX IF NOT EXISTS co_topic ON curriculum_outcomes(curriculum_id, topic);
+    CREATE TABLE IF NOT EXISTS question_outcomes (qid INTEGER NOT NULL, code TEXT NOT NULL, PRIMARY KEY (qid, code));
+    CREATE INDEX IF NOT EXISTS qo_code ON question_outcomes(code);`);
   db.exec(`CREATE TABLE IF NOT EXISTS lesson_versions (
       id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, topic TEXT NOT NULL, data_json TEXT NOT NULL,
       source TEXT, updated_by INTEGER, updated_at INTEGER NOT NULL, replaced_at INTEGER NOT NULL);

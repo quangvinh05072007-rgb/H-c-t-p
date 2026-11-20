@@ -71,6 +71,7 @@ Nhập ở **Nhập đề → Gói nhập chuẩn**. App **kiểm tra trước**
 | `explanation` | không | Lời giải. |
 | `group` | không | Các câu cùng `group` luôn đi cùng nhau khi đảo đề (câu chùm). |
 | `form` | không | **Dạng toán**, chi tiết hơn chuyên đề (vd `"Đổi biến số"`, `"Tích phân từng phần"`) — dùng để lọc và ghép đề. |
+| `outcomes` | không | Mã **yêu cầu cần đạt** (YCCĐ) câu này kiểm tra, vd `["12.DS.3.1"]` (tối đa 10). Chỉ nhận mã có trong chương trình chuẩn của trường (xem mục `curriculum`); mã lạ bị bỏ, có cảnh báo. |
 
 **Công thức** viết LaTeX giữa hai dấu `$`, vd `$\int_0^1 2x\,dx$`. Trong JSON phải nhân đôi dấu `\`: `"$\\int_0^1 2x\\,dx$"`.
 
@@ -113,6 +114,43 @@ Nhập lại một chuyên đề thì bài mới được dùng ngay, bài cũ �
 ```
 
 Mỗi công thức nên viết `Tiêu đề: nội dung` để app tách thành dòng đề mục. Cần ít nhất `summary`, `formulas` hoặc `examples`.
+
+## Chương trình chuẩn — `curriculum`
+
+Bảng **yêu cầu cần đạt (YCCĐ)** của chương trình môn Toán, theo lớp và chuyên đề. **Chỉ chủ web nhập được**; gói của giáo viên có mục này thì bị bỏ qua.
+Mỗi lần nhập tạo **một phiên bản nháp**; chủ web xem, so sánh với bản đang dùng rồi bấm **Công bố** ở trang **Chương trình chuẩn** (menu tài khoản của Quản lý). Chỉ bản đã công bố mới hiện cho giáo viên (chọn YCCĐ khi soạn câu) và học sinh (mục Tự học).
+
+Cách làm: ở trang Chương trình chuẩn bấm **Lời nhắc cho AI**, dán vào AI kèm văn bản chương trình chính thức, rồi nhập JSON AI trả về ở trang Nhập đề. Đối chiếu nguyên văn với văn bản gốc trước khi công bố.
+
+```json
+{
+  "format": "smartexam-package",
+  "version": 2,
+  "source": "Chương trình môn Toán GDPT 2018",
+  "curriculum": {
+    "name": "Chương trình môn Toán GDPT 2018 – THPT",
+    "sourceDoc": "Số hiệu văn bản ban hành",
+    "outcomes": [
+      { "code": "10.DS.1.1", "grade": 10, "topic": "T10.MENHDE", "strand": "DS",
+        "content": "Tên nội dung", "text": "Nguyên văn yêu cầu cần đạt", "competencies": ["TD"] }
+    ]
+  }
+}
+```
+
+| Trường | Bắt buộc | Ý nghĩa |
+|---|---|---|
+| `name` | có | Tên chương trình (tên phiên bản). |
+| `sourceDoc` | nên có | Văn bản gốc (số hiệu văn bản ban hành). |
+| `outcomes[].code` | có | Mã YCCĐ, không trùng; chữ, số, `.` `-` `_`, tối đa 40 ký tự. Gợi ý `<lớp>.<mạch>.<nội dung>.<thứ tự>`. **Giữ mã ổn định giữa các phiên bản**: câu hỏi gắn YCCĐ theo mã. |
+| `outcomes[].grade` | có | 10, 11 hoặc 12 — phải đúng lớp của `topic`. |
+| `outcomes[].topic` | có | Mã chuyên đề của app (bảng cuối trang). |
+| `outcomes[].text` | có | Nguyên văn YCCĐ. Công thức đặt trong `$…$`. |
+| `outcomes[].content` | không | Tên nội dung trong bảng chương trình. |
+| `outcomes[].strand` | không | Mạch: `DS` Số và Đại số, `HH` Hình học và Đo lường, `TK` Thống kê và Xác suất (nhận cả tên). |
+| `outcomes[].competencies` | không | Năng lực: `TD` tư duy và lập luận, `MH` mô hình hóa, `GQ` giải quyết vấn đề, `GT` giao tiếp, `CC` sử dụng công cụ, phương tiện (nhận cả tên). |
+
+Một gói có thể chỉ có `curriculum` (không cần câu hỏi). Tối đa 1500 YCCĐ.
 
 ## Mã chuyên đề
 
