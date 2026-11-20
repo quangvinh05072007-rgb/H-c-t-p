@@ -55,7 +55,7 @@ test('Kiểm tra gói: chuẩn hóa đáp án, báo lỗi từng mục, mục l�
   assert.equal(bindImages('a [[image:h.png]] b', { 'h.png': 7 }), 'a [[img:7]] b');
 });
 
-test('Nhập gói .zip: hình, duyệt luôn, tạo đề, bài học; nhập lại không nhân đôi câu', async () => {
+test('Nhập gói .zip: hình, duyệt luôn, tạo đề; bài học trong gói của giáo viên bị bỏ qua; nhập lại không nhân đôi câu', async () => {
   const lan = await login('gv.lan');
   const pkg = samplePackage();
   pkg.source = 'Gói thử nghiệm';
@@ -71,6 +71,8 @@ test('Nhập gói .zip: hình, duyệt luôn, tạo đề, bài học; nhập l�
   assert.equal(dry.data.questions, 3);
   assert.equal(dry.data.exams.length, 1);
   assert.deepEqual(dry.data.errors, []);
+  assert.deepEqual(dry.data.lessons, [], 'giáo viên không nhập bài tự học');
+  assert.ok(dry.data.warnings.some((w) => /Bài tự học do chủ web nhập: bỏ qua 1 bài học/.test(w)));
   const before = app.db.get('SELECT COUNT(*) n FROM questions').n;
   assert.equal(app.db.get('SELECT COUNT(*) n FROM questions').n, before, 'kiểm tra thử không ghi gì');
 
@@ -78,7 +80,7 @@ test('Nhập gói .zip: hình, duyệt luôn, tạo đề, bài học; nhập l�
   assert.equal(done.status, 200, JSON.stringify(done.data));
   assert.equal(done.data.approved, 3);
   assert.equal(done.data.exams.length, 1);
-  assert.equal(done.data.lessons, 1);
+  assert.equal(done.data.lessons, 0);
   assert.equal(done.data.images, 1);
   const q = app.db.get("SELECT stem, status, source FROM questions WHERE stem LIKE 'Câu có hình%'");
   assert.match(q.stem, /\[\[img:\d+\]\]/);
@@ -89,7 +91,7 @@ test('Nhập gói .zip: hình, duyệt luôn, tạo đề, bài học; nhập l�
   assert.equal(exam.items.length, 3);
 
   const lessons = await lan.get('/api/lessons');
-  assert.match(lessons.data.lessons['T12.NGUYENHAM'].examples[0].solution, /\[\[img:\d+\]\]/);
+  assert.equal(lessons.data.lessons['T12.NGUYENHAM'], undefined, 'bài tự học không bị giáo viên thay');
 
   const again = await lan.upload('/api/import/package?filename=goi.zip&approve=1', buf);
   assert.equal(again.data.skipped, 3);

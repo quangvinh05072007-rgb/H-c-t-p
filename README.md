@@ -80,7 +80,7 @@ shared/      Lõi thuần JavaScript, dùng chung máy chủ và trình duyệt,
   omml.mjs        LaTeX ↔ Equation của Word (OMML)
   docx.mjs        đọc/ghi .docx;  exportExam.mjs  xuất đề + đáp án
   sheet.mjs       nhập Excel/CSV;  topics.mjs  chuyên đề GDPT 2018
-server/      API (http thuần), SQLite, phân quyền, nhật ký, AI tùy chọn, dữ liệu mẫu
+server/      API (http thuần), SQLite, phân quyền, nhật ký, dữ liệu mẫu
 src/         Giao diện React (giáo viên, học sinh, quản lý)
 tests/       Test node:test (chấm, sinh đề, chẩn đoán, nhập, Word, luồng API đầu-cuối)
 docs/        tam-nhin.md (tầm nhìn, tính năng, kiến trúc, lộ trình), bao-cao.md (báo cáo kiểm thử)

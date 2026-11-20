@@ -1374,6 +1374,12 @@ export function createApp(config = {}) {
       }
     }
     const p = parsePackage(json, new Set(Object.keys(images)), rejected);
+    // Bài tự học là nội dung chung do chủ web nhập; gói của giáo viên chỉ lấy câu hỏi và đề
+    const droppedLessons = user.role !== 'admin' && p.lessons.length > 0;
+    if (droppedLessons) {
+      p.warnings.push(`Bài tự học do chủ web nhập: bỏ qua ${p.lessons.length} bài học trong gói.`);
+      p.lessons = [];
+    }
     p.warnings.unshift(...notes);
     const dryRun = query.dryRun === '1' || query.dryRun === 'true';
     if (dryRun) {
@@ -1405,7 +1411,7 @@ export function createApp(config = {}) {
       }));
       return { dryRun: true, ...packageSummary(p), duplicates, preview, imageData, missingImages, original: original ? { name: original.name, size: original.data.length } : null };
     }
-    if (!p.questions.length && !p.lessons.length) fail(400, p.errors[0]?.message ?? 'Gói không có mục hợp lệ để nhập.');
+    if (!p.questions.length && !p.lessons.length) fail(400, p.errors[0]?.message ?? (droppedLessons ? 'Bài tự học do chủ web nhập; gói này không có câu hỏi nào để nhập.' : 'Gói không có mục hợp lệ để nhập.'));
 
     const wantApprove = query.approve === '1' || query.approve === 'true';
     const canApprove = wantApprove && reviewPolicy(user.school_id) !== 'double';
@@ -1477,9 +1483,10 @@ export function createApp(config = {}) {
         exams.push({ id: Number(r.lastInsertRowid), title: e.title });
       }
 
-      // Bài học: ghi đè theo chuyên đề
+      // Bài học: bản đang dùng được cất vào lịch sử rồi mới thay
       for (const l of p.lessons) {
         const entry = JSON.parse(bindImages(JSON.stringify(l.entry), idByName));
+        archiveLesson(user.school_id, l.topic);
         db.run(
           `INSERT INTO lessons (school_id, topic, data_json, source, updated_by, updated_at) VALUES (?,?,?,?,?,?)
            ON CONFLICT(school_id, topic) DO UPDATE SET data_json = excluded.data_json, source = excluded.source, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
@@ -1496,6 +1503,69 @@ export function createApp(config = {}) {
   route('GET', '/api/lessons', ['admin', 'teacher', 'student'], ({ user }) => ({
     lessons: Object.fromEntries(db.all('SELECT topic, data_json FROM lessons WHERE school_id = ?', user.school_id).map((r) => [r.topic, r.data])),
   }));
+
+  /** Cất bài đang dùng của chuyên đề vào lịch sử (nếu có). */
+  function archiveLesson(schoolId, topic) {
+    const cur = db.raw.prepare('SELECT * FROM lessons WHERE school_id = ? AND topic = ?').get(schoolId, topic);
+    if (!cur) return;
+    db.run('INSERT INTO lesson_versions (school_id, topic, data_json, source, updated_by, updated_at, replaced_at) VALUES (?,?,?,?,?,?,?)',
+      schoolId, topic, cur.data_json, cur.source, cur.updated_by, cur.updated_at, now());
+  }
+  const userName = (id) => (id ? db.get('SELECT display_name FROM users WHERE id = ?', id)?.display_name ?? null : null);
+  const lessonTitle = (data) => {
+    try {
+      const d = typeof data === 'string' ? JSON.parse(data) : data;
+      return String(d?.title ?? d?.summary ?? '').slice(0, 120) || null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Quản lý bài tự học (chủ web): bài đang dùng của từng chuyên đề, lịch sử, khôi phục, về bản mặc định
+  route('GET', '/api/admin/lessons', ['admin'], ({ user }) => {
+    const cur = Object.fromEntries(db.raw.prepare('SELECT topic, source, updated_by, updated_at FROM lessons WHERE school_id = ?').all(user.school_id).map((r) => [r.topic, r]));
+    const counts = Object.fromEntries(db.raw.prepare('SELECT topic, COUNT(*) n FROM lesson_versions WHERE school_id = ? GROUP BY topic').all(user.school_id).map((r) => [r.topic, r.n]));
+    return {
+      topics: TOPICS.map((t) => {
+        const c = cur[t.code];
+        return {
+          code: t.code, grade: t.grade, name: t.name,
+          imported: c ? { source: c.source, updatedAt: c.updated_at, updatedBy: userName(c.updated_by) } : null,
+          versions: counts[t.code] ?? 0,
+        };
+      }),
+    };
+  });
+  route('GET', '/api/admin/lessons/:topic/versions', ['admin'], ({ user, params }) => {
+    if (!TOPIC_BY_CODE[params.topic]) fail(404, 'Không có chuyên đề này.');
+    const rows = db.raw.prepare('SELECT id, data_json, source, updated_by, updated_at, replaced_at FROM lesson_versions WHERE school_id = ? AND topic = ? ORDER BY replaced_at DESC, id DESC').all(user.school_id, params.topic);
+    return {
+      versions: rows.map((r) => ({ id: r.id, source: r.source, title: lessonTitle(r.data_json), updatedAt: r.updated_at, updatedBy: userName(r.updated_by), replacedAt: r.replaced_at })),
+    };
+  });
+  route('POST', '/api/admin/lessons/:topic/restore', ['admin'], ({ user, params, body, ip }) => {
+    const v = db.raw.prepare('SELECT * FROM lesson_versions WHERE id = ? AND school_id = ? AND topic = ?').get(Number(body?.versionId), user.school_id, params.topic);
+    if (!v) fail(404, 'Không tìm thấy bản cũ này.');
+    db.tx(() => {
+      archiveLesson(user.school_id, params.topic);
+      db.run(
+        `INSERT INTO lessons (school_id, topic, data_json, source, updated_by, updated_at) VALUES (?,?,?,?,?,?)
+         ON CONFLICT(school_id, topic) DO UPDATE SET data_json = excluded.data_json, source = excluded.source, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+        user.school_id, params.topic, v.data_json, v.source, user.id, now(),
+      );
+    });
+    audit(user, 'lesson_restore', `${params.topic}: khôi phục bản ${new Date(v.updated_at).toLocaleDateString('vi-VN')}`, ip);
+    return { ok: true };
+  });
+  route('DELETE', '/api/admin/lessons/:topic', ['admin'], ({ user, params, ip }) => {
+    if (!TOPIC_BY_CODE[params.topic]) fail(404, 'Không có chuyên đề này.');
+    db.tx(() => {
+      archiveLesson(user.school_id, params.topic);
+      db.run('DELETE FROM lessons WHERE school_id = ? AND topic = ?', user.school_id, params.topic);
+    });
+    audit(user, 'lesson_reset', `${params.topic}: về bài mặc định`, ip);
+    return { ok: true };
+  });
   route('GET', '/api/import/template.csv', STAFF, () => ({ __file: { name: 'mau-nhap-cau-hoi.csv', type: 'text/csv; charset=utf-8', data: Buffer.from(CSV_TEMPLATE, 'utf8') } }));
 
   route('POST', '/api/exams/generate', STAFF, ({ user, body }) => {

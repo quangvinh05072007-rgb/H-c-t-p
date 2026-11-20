@@ -1,5 +1,7 @@
 # OCR and upgrade decisions — 2026-10-26
 
+> **Ghi chú (11/2026):** đây là ghi chép lịch sử từ bản làm trên máy khác. Các module OCR nhắc dưới đây (`server/pdf-ocr.mjs`, `server/math-ocr.mjs`, `tools/marker_extract.py`, Tesseract/Marker) **không có trong repo này**. App hiện không gọi AI và không tự đọc ảnh hay PDF scan; đề và tài liệu được xử lý bên ngoài rồi nhập bằng gói chuẩn — xem README và `docs/goi-nhap.md`.
+
 Implemented: local scanned PDF import using PDF.js + @napi-rs/canvas + Tesseract.js with bundled Vietnamese trained data. No upload to an external OCR service, AI key, GPU, Python or runtime model download is required. Existing Word import already reads Office Math (OMML) and embedded images; existing KaTeX renders editable LaTeX.
 
 Scans use original image crops as the canonical question. Diagrams, tables, inline equations and answer choices remain visually intact. OCR text is separate, editable and searchable. Formula recognition is not verified editable LaTeX; image retention avoids presenting corrupted OCR math as correct. Question continuations are kept across pages. A–D stays in printed order for these questions, while question order can still vary. Explicit answer conclusions are extracted from the separate text solution section, with missing/conflicting answers left for review. New questions remain drafts.

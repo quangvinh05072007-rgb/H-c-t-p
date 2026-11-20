@@ -97,7 +97,8 @@ Câu trùng hệt (cùng loại, cùng đề bài) với câu đã có trong ng�
 
 ## Bài học Tự học — `lessons`
 
-Mỗi chuyên đề một bài; nhập lại sẽ **ghi đè** bài cũ của chuyên đề đó.
+Mỗi chuyên đề một bài. **Chỉ chủ web (tài khoản Quản lý) nhập được bài học**; gói do giáo viên nhập thì phần `lessons` bị bỏ qua (có cảnh báo ở bước kiểm tra).
+Nhập lại một chuyên đề thì bài mới được dùng ngay, bài cũ được cất vào lịch sử. Xem, khôi phục hoặc đưa về bài mặc định ở trang **Bài tự học** (menu tài khoản của Quản lý).
 
 ```json
 {

@@ -1,5 +1,7 @@
 # Bàn giao SmartExam cho Antigravity — 26/10/2026
 
+> **Ghi chú (11/2026):** đây là ghi chép lịch sử từ bản làm trên máy khác. Các module OCR nhắc dưới đây (`server/pdf-ocr.mjs`, `server/math-ocr.mjs`, `tools/marker_extract.py`, Tesseract/Marker) **không có trong repo này**. App hiện không gọi AI và không tự đọc ảnh hay PDF scan; đề và tài liệu được xử lý bên ngoài rồi nhập bằng gói chuẩn — xem README và `docs/goi-nhap.md`.
+
 ## Yêu cầu của chủ dự án
 
 Tiếp tục công việc đang dang dở trong `C:\Users\LEGION\Documents\SmartExam-AI`. Chủ dự án đã yêu cầu chuyển việc sang Antigravity. Giữ toàn bộ chức năng, dữ liệu và thay đổi hiện có. Không reset Git, seed/reset dữ liệu thật, xóa file hoặc viết lại app từ đầu.

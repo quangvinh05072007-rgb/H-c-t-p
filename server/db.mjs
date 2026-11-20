@@ -238,6 +238,11 @@ export function migrate(db) {
     CREATE TRIGGER IF NOT EXISTS exam_cleanup AFTER DELETE ON exams BEGIN
       DELETE FROM exam_items WHERE exam_id = OLD.id; DELETE FROM exam_variants WHERE exam_id = OLD.id; END;`);
   // Thư mục riêng của từng giáo viên để xếp đề (một đề có thể nằm trong nhiều thư mục của nhiều người)
+  // Lịch sử bài tự học: mỗi lần chủ web nhập lại / khôi phục / về mặc định, bản đang dùng được cất vào đây
+  db.exec(`CREATE TABLE IF NOT EXISTS lesson_versions (
+      id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, topic TEXT NOT NULL, data_json TEXT NOT NULL,
+      source TEXT, updated_by INTEGER, updated_at INTEGER NOT NULL, replaced_at INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS lv_topic ON lesson_versions(school_id, topic);`);
   db.exec(`CREATE TABLE IF NOT EXISTS exam_folders (
       id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, owner_id INTEGER NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS exam_folder_items (
